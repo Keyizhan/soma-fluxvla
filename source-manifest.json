@@ -449,7 +449,7 @@
     },
     "README.md": {
       "origin": "SOMA integration",
-      "sha256": "c67642d4fb999e21e7e289a16349ce6c2a482faf0a89c8c99279a44c35929b61"
+      "sha256": "1c4561f8fbd6d5b568b1b7528c8e124940ede5fee650722c388f5e5137a364dc"
     },
     "assets/fast/SHA256SUMS": {
       "origin": "SOMA integration",
@@ -818,11 +818,15 @@
     },
     "scripts/diagnostics/ablate_fast.py": {
       "origin": "SOMA integration / offline FAST diagnostics",
-      "sha256": "04ca830086b576a4fe9a81da149532b9b59e5a4c579cfa62b041a425e080c231"
+      "sha256": "3e36a86f0aa9b6254a2982bf16360a7adc0a4e0d75db7df1ca08c969c7a0fb99"
     },
     "tests/test_fast_audit.py": {
       "origin": "SOMA integration / offline FAST diagnostics",
       "sha256": "a442e5ed97f4bf45d1d4b289a5c0345589f901b0a65d84195ad5742b9479def4"
+    },
+    "docs/research/pi05_small_data_plan.md": {
+      "origin": "SOMA integration / small-data architecture research",
+      "sha256": "cb408b21ce0aacdeea48f5a2a985d15c281c351444f1951fc09c43e7957b97a2"
     }
   },
   "integration_date": "2026-10-20",

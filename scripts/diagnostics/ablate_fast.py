@@ -34,11 +34,12 @@ def select(fx, split, per_group):
 
 
 @torch.no_grad()
-def evaluate(m, fx, packed, indices):
+def evaluate(m, fx, packed, indices, evaluate_actions=False):
     previous = m.training
     m.eval()
     rows = []
     flow_num = flow_den = 0.0
+    action_num = action_den = 0.0
     for i in indices:
         b = collate([packed[i]], [i], fx, 224, torch.device("cuda"), True, m.n_action_steps)
         with torch.autocast("cuda", dtype=torch.bfloat16):
@@ -53,11 +54,30 @@ def evaluate(m, fx, packed, indices):
                 b["img_masks"],
                 action_masks=b["action_masks"],
             )
+            if evaluate_actions:
+                seed(199100 + i)
+                sampled = m.sample_actions_given_subtask(
+                    b["images"],
+                    torch.zeros(1, 32, device="cuda"),
+                    b["low_input_ids"],
+                    b["low_valid_mask"],
+                    b["img_masks"],
+                    noise=torch.randn_like(b["actions"]),
+                    num_steps=10,
+                    use_cache=True,
+                )
+                dims = sampled.shape[-1]
+                mask = b["action_masks"][..., :dims]
+                action_num += float(((sampled - b["actions"][..., :dims]).square() * mask).sum())
+                action_den += int(mask.sum())
         n = int(b["action_masks"].sum())
         flow_num += float(flow["loss"]) * n
         flow_den += n
     m.train(previous)
-    return dict(aggregate(rows), flow_mse=flow_num / max(1, flow_den))
+    result = dict(aggregate(rows), flow_mse=flow_num / max(1, flow_den))
+    if evaluate_actions:
+        result["gt_subtask_sampled_action_mse"] = action_num / max(1, action_den)
+    return result
 
 
 def run(args):
@@ -77,12 +97,14 @@ def run(args):
         "stage1_objective": (10.0, 1.0, 0.0),
         "hybrid": (0.15, 0.15, 1.0),
         "hybrid_insulated": (0.15, 0.15, 1.0),
+        "subtask_flow": (0.15, 0.0, 1.0),
+        "subtask_flow_insulated": (0.15, 0.0, 1.0),
     }
     seed(1702)
     p = SubtaskPolicy.from_bundle(args.bundle, allow_legacy_contract=True)
     m = p.model
     packed = prepare(fx, p.prompts, 14)
-    m.stop_gradient_flow_to_prefix = args.arm == "hybrid_insulated"
+    m.stop_gradient_flow_to_prefix = args.arm.endswith("_insulated")
     recipe = weights[args.arm]
     for name, param in m.named_parameters():
         param.requires_grad_(
@@ -115,6 +137,8 @@ def run(args):
         stop_gradient_flow_to_prefix=m.stop_gradient_flow_to_prefix,
         train_source_indices=[fx.records[i]["source_index"] for i in train],
         validation_source_indices=[fx.records[i]["source_index"] for i in val],
+        evaluate_actions=args.evaluate_actions,
+        action_evaluation="GT subtask, 10 denoise steps, fixed seed per sample, normalized valid-element MSE",
         note="Matched-start small-subset adaptation; stage1_objective is NOT original Stage1 continuation; BF16 parameters/Adam states match source trainer.",
     )
     save(output / "config.json", metadata)
@@ -123,8 +147,12 @@ def run(args):
         if update in {0, args.updates // 2, args.updates}:
             point = dict(
                 update=update,
-                train=evaluate(m, fx, packed, train),
-                validation=evaluate(m, fx, packed, val),
+                train=evaluate(
+                    m, fx, packed, train, args.evaluate_actions and update in {0, args.updates}
+                ),
+                validation=evaluate(
+                    m, fx, packed, val, args.evaluate_actions and update in {0, args.updates}
+                ),
             )
             checkpoints.append(point)
             save(output / "evaluation.json", checkpoints)
@@ -222,12 +250,24 @@ def main():
     p.add_argument(
         "--arm",
         required=True,
-        choices=["fast_only", "stage1_objective", "hybrid", "hybrid_insulated"],
+        choices=[
+            "fast_only",
+            "stage1_objective",
+            "hybrid",
+            "hybrid_insulated",
+            "subtask_flow",
+            "subtask_flow_insulated",
+        ],
     )
     p.add_argument("--output", required=True)
     p.add_argument("--updates", type=int, default=32)
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--lr", type=float, default=2e-5)
+    p.add_argument(
+        "--evaluate-actions",
+        action="store_true",
+        help="Also compare sampled actions with GT subtask at initial/final evaluation",
+    )
     args = p.parse_args()
     if args.updates < 1 or args.batch_size < 1 or not np.isfinite(args.lr) or args.lr <= 0:
         p.error("updates, batch-size and lr must be positive; lr must be finite")
