@@ -3,6 +3,7 @@
 PI0.5 Piper 与 subtask + FAST + flow 的模型、训练、导出和推理代码。
 
 Subtask 完整流程见 [训练、导出与推理说明](docs/subtask_workflow.md)。
+FAST 损失检查、编解码验证和四组离线对照见 [2026-10-20 诊断报告](docs/fast_audit_20261020.md)。
 本仓库提供模型与推理服务；真机控制由独立部署框架负责。
 
 新增入口：`scripts/train_subtask.py`、`scripts/export_checkpoint.py`、

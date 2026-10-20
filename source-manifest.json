@@ -449,7 +449,7 @@
     },
     "README.md": {
       "origin": "SOMA integration",
-      "sha256": "38743e7ed6aa9621e83750dab253a6124d39c0e098c154f7a704dd7c03c24200"
+      "sha256": "c67642d4fb999e21e7e289a16349ce6c2a482faf0a89c8c99279a44c35929b61"
     },
     "assets/fast/SHA256SUMS": {
       "origin": "SOMA integration",
@@ -807,6 +807,22 @@
     "docs/validation_20261020.json": {
       "origin": "SOMA integration",
       "sha256": "646220b0e1912572ca3ed65711a342e4ddc8ff5cbff74923f43fe165532798b2"
+    },
+    "docs/fast_audit_20261020.md": {
+      "origin": "SOMA integration / offline FAST diagnostics",
+      "sha256": "d7ba737a6098668c585afee340fad2e755b9de30cc2ba699afbc0399e82b1a69"
+    },
+    "scripts/diagnostics/audit_fast.py": {
+      "origin": "SOMA integration / offline FAST diagnostics",
+      "sha256": "c837c069a9c62e34ea8871938c3189a22c286d3c004f7412bf475fbfd12f94b0"
+    },
+    "scripts/diagnostics/ablate_fast.py": {
+      "origin": "SOMA integration / offline FAST diagnostics",
+      "sha256": "04ca830086b576a4fe9a81da149532b9b59e5a4c579cfa62b041a425e080c231"
+    },
+    "tests/test_fast_audit.py": {
+      "origin": "SOMA integration / offline FAST diagnostics",
+      "sha256": "a442e5ed97f4bf45d1d4b289a5c0345589f901b0a65d84195ad5742b9479def4"
     }
   },
   "integration_date": "2026-10-20",
