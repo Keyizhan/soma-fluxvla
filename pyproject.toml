@@ -23,6 +23,7 @@ dependencies = [
 cache = ["decord2==3.4.0"]
 benchmark = ["zstandard", "lz4"]
 test = ["pytest>=8", "ruff"]
+serve = ["websockets>=14,<16", "msgpack>=1,<2", "pydantic>=2,<3"]
 
 [tool.setuptools.packages.find]
 include = ["fluxvla*"]

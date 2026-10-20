@@ -1,3 +1,5 @@
+> 历史实验计划，保留研究过程。当前入口与已落实的条件语义见 [subtask_workflow.md](../subtask_workflow.md)。
+
 # π0.5 subtask + FAST 复现待办（对齐 Ke-Wang1017/openpi_subtask）
 
 参考实现：`experiments/pi05_subtask_architecture/references/kewang/`

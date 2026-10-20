@@ -2,374 +2,814 @@
   "source_directory": "fluxvla-training (original local snapshot)",
   "files": {
     "configs/pi05_piper.py": {
-      "sha256": "3ec3a23da5d487798bee2932547b1a6d8ec48023d93cfff6bc496303c0f0aaf4",
-      "origin": "SOMA integration / cloud run configuration"
+      "sha256": "8e480f16d4109f413db9f4d500ce4c4f9542a8c225099760aa8833eca9a532ba",
+      "origin": "SOMA integration / cloud run configuration",
+      "cloud_snapshot_sha256": "3ec3a23da5d487798bee2932547b1a6d8ec48023d93cfff6bc496303c0f0aaf4"
     },
     "fluxvla/__init__.py": {
       "sha256": "ef41fc0ad5e541d38ebd59ffa791c30414107f2c59a4a57e43d1e255de80a67a",
       "source_sha256": "4c3fdcfef75b78e849e2afd2bd5d482505f205f52d67f8bdf58924ee5c3bfc14",
       "origin": "fluxvla-training/fluxvla/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "ef41fc0ad5e541d38ebd59ffa791c30414107f2c59a4a57e43d1e255de80a67a"
     },
     "fluxvla/collators/__init__.py": {
       "sha256": "dbcc462fc89e6287e99a296fcca310826f4ec047683cd3cff437247c1dc57421",
       "source_sha256": "633d83ee168befcdaacd99f081c1c58559714d2d7ee16b965a045f896fad0c99",
       "origin": "fluxvla-training/fluxvla/collators/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "dbcc462fc89e6287e99a296fcca310826f4ec047683cd3cff437247c1dc57421"
     },
     "fluxvla/collators/dict_collator.py": {
       "sha256": "6e7dc3cc6b38935ece899a226a78ccfab261b3bc9e290da5e059bf5617ad70db",
       "source_sha256": "6e7dc3cc6b38935ece899a226a78ccfab261b3bc9e290da5e059bf5617ad70db",
       "origin": "fluxvla-training/fluxvla/collators/dict_collator.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "6e7dc3cc6b38935ece899a226a78ccfab261b3bc9e290da5e059bf5617ad70db"
     },
     "fluxvla/datasets/__init__.py": {
       "sha256": "3f94e12a590bf1138c29f38efd93a651e7c376dd023343b980b9eeb1ff220bcc",
       "source_sha256": "453fd01e36cfafd0dcff70e95e39cbd153336e9f0b3f3fd902a43c197e0f3a40",
       "origin": "fluxvla-training/fluxvla/datasets/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "3f94e12a590bf1138c29f38efd93a651e7c376dd023343b980b9eeb1ff220bcc"
     },
     "fluxvla/datasets/cache/__init__.py": {
       "sha256": "109f6d989de6c69c9e46861abc73d515f9e1a7796da8782e3a5c13604fac5a6c",
-      "origin": "SOMA integration / cloud run configuration"
+      "origin": "SOMA integration / cloud run configuration",
+      "cloud_snapshot_sha256": "109f6d989de6c69c9e46861abc73d515f9e1a7796da8782e3a5c13604fac5a6c"
     },
     "fluxvla/datasets/cache/build_video_cache.py": {
       "sha256": "7eba98a4487d464411d6259b0245a7bf0b601578ae85a3163148818be02f3e21",
-      "origin": "SOMA integration / cloud run configuration"
+      "origin": "SOMA integration / cloud run configuration",
+      "cloud_snapshot_sha256": "7eba98a4487d464411d6259b0245a7bf0b601578ae85a3163148818be02f3e21"
     },
     "fluxvla/datasets/cache/video_cache.py": {
       "sha256": "3924de1e4a27ae4e22b24ce5f6731ae413224cf633dfd8317b4310eb824392ad",
-      "origin": "SOMA integration / cloud run configuration"
+      "origin": "SOMA integration / cloud run configuration",
+      "cloud_snapshot_sha256": "3924de1e4a27ae4e22b24ce5f6731ae413224cf633dfd8317b4310eb824392ad"
     },
     "fluxvla/datasets/dataset_wrapper.py": {
       "sha256": "27867a25455217e585ca5269195db79a7a1fd923f9912c8171968fb333415750",
       "source_sha256": "27867a25455217e585ca5269195db79a7a1fd923f9912c8171968fb333415750",
       "origin": "fluxvla-training/fluxvla/datasets/dataset_wrapper.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "27867a25455217e585ca5269195db79a7a1fd923f9912c8171968fb333415750"
     },
     "fluxvla/datasets/parquet_dataset.py": {
       "sha256": "80ace2ea144dc383eac7722673c613df4dbe5db9ed9d23227b8e8edd7eeafd32",
       "source_sha256": "7e6358face50f4e84929cacc98d8659650550f252f84ffdd571fa570e5e8576a",
       "origin": "fluxvla-training/fluxvla/datasets/parquet_dataset.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "80ace2ea144dc383eac7722673c613df4dbe5db9ed9d23227b8e8edd7eeafd32"
     },
     "fluxvla/datasets/parquet_dataset_v3.py": {
       "sha256": "e8c792c50b61457ba30295c01702094f47b12eb4272026ec86e784cb2f352325",
       "source_sha256": "e8c792c50b61457ba30295c01702094f47b12eb4272026ec86e784cb2f352325",
       "origin": "fluxvla-training/fluxvla/datasets/parquet_dataset_v3.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "e8c792c50b61457ba30295c01702094f47b12eb4272026ec86e784cb2f352325"
     },
     "fluxvla/datasets/utils/__init__.py": {
       "sha256": "68b719295364e143eb0df7c12ee74c9bfb425f1f049154a2212d5fb6738adf34",
       "source_sha256": "2a21cea1637188f9f7e7b948b1844c8600b3e2b343e64a512b2178a6476b0ed5",
       "origin": "fluxvla-training/fluxvla/datasets/utils/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "68b719295364e143eb0df7c12ee74c9bfb425f1f049154a2212d5fb6738adf34"
     },
     "fluxvla/datasets/utils/statistics.py": {
       "sha256": "cb7abedcb50f5a5b7034ba7cd82b89567ea4d736275c12b952682c66d6675e72",
       "source_sha256": "cb7abedcb50f5a5b7034ba7cd82b89567ea4d736275c12b952682c66d6675e72",
       "origin": "fluxvla-training/fluxvla/datasets/utils/statistics.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "cb7abedcb50f5a5b7034ba7cd82b89567ea4d736275c12b952682c66d6675e72"
     },
     "fluxvla/datasets/utils/video_decode.py": {
       "sha256": "2f4a6fab6a892bdbab148fd093d65e9c106548c0cf433a2c5585f043e7e1dada",
       "source_sha256": "2f4a6fab6a892bdbab148fd093d65e9c106548c0cf433a2c5585f043e7e1dada",
       "origin": "fluxvla-training/fluxvla/datasets/utils/video_decode.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "2f4a6fab6a892bdbab148fd093d65e9c106548c0cf433a2c5585f043e7e1dada"
     },
     "fluxvla/engines/__init__.py": {
       "sha256": "fbf44548adc0a2d62735d0f69a3d8def17bf69b8e15229efaed04929412604cc",
       "source_sha256": "a3610ac662c13d460dd2c4b25c517b4cc619934fabc254209e3864f8db20eb48",
       "origin": "fluxvla-training/fluxvla/engines/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "fbf44548adc0a2d62735d0f69a3d8def17bf69b8e15229efaed04929412604cc"
     },
     "fluxvla/engines/losses/__init__.py": {
       "sha256": "04eb0b2465dc4316597cf8a4c98bfe24b9efe713de1fe8662148f460b23d660d",
       "source_sha256": "04eb0b2465dc4316597cf8a4c98bfe24b9efe713de1fe8662148f460b23d660d",
       "origin": "fluxvla-training/fluxvla/engines/losses/__init__.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "04eb0b2465dc4316597cf8a4c98bfe24b9efe713de1fe8662148f460b23d660d"
     },
     "fluxvla/engines/losses/rabc.py": {
       "sha256": "dc7c92a41b3d49bd0d0e7d8225341b6fac420f2afad25af2eaa832bc80a649d9",
       "source_sha256": "dc7c92a41b3d49bd0d0e7d8225341b6fac420f2afad25af2eaa832bc80a649d9",
       "origin": "fluxvla-training/fluxvla/engines/losses/rabc.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "dc7c92a41b3d49bd0d0e7d8225341b6fac420f2afad25af2eaa832bc80a649d9"
     },
     "fluxvla/engines/metrics/__init__.py": {
       "sha256": "3a9ebd37092af24a647f06356be3c3f3bec24bc1d183aa44ef275b57a8851891",
       "source_sha256": "3a9ebd37092af24a647f06356be3c3f3bec24bc1d183aa44ef275b57a8851891",
       "origin": "fluxvla-training/fluxvla/engines/metrics/__init__.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "3a9ebd37092af24a647f06356be3c3f3bec24bc1d183aa44ef275b57a8851891"
     },
     "fluxvla/engines/metrics/vla_metric.py": {
       "sha256": "7fb82a1f757e6610ec887a66ec024e12c8485d30c50267fda7e5abcb7e66a2f5",
       "source_sha256": "7fb82a1f757e6610ec887a66ec024e12c8485d30c50267fda7e5abcb7e66a2f5",
       "origin": "fluxvla-training/fluxvla/engines/metrics/vla_metric.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "7fb82a1f757e6610ec887a66ec024e12c8485d30c50267fda7e5abcb7e66a2f5"
     },
     "fluxvla/engines/runners/__init__.py": {
       "sha256": "2575cac52e01f1c808e8866b8cc9416b4aeb4fc5c5ba49ddd456be52ee7a5164",
       "source_sha256": "c800c6b2fa56d463fe01703632bc78568f79b2756de12ae9f54d5a06a3cf389f",
       "origin": "fluxvla-training/fluxvla/engines/runners/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "2575cac52e01f1c808e8866b8cc9416b4aeb4fc5c5ba49ddd456be52ee7a5164"
     },
     "fluxvla/engines/runners/base_train_runner.py": {
       "sha256": "3e89ce5421eaaecf686387ca549c6c2794469ab295f4e65fa95e0d3180ff8fba",
       "source_sha256": "4e4fedd68e059ca8a8f2fb0e2c9fc61793af7b5b9151baaaaad296f5c1ac3793",
       "origin": "fluxvla-training/fluxvla/engines/runners/base_train_runner.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "3e89ce5421eaaecf686387ca549c6c2794469ab295f4e65fa95e0d3180ff8fba"
     },
     "fluxvla/engines/runners/ddp_train_runner.py": {
       "sha256": "21e776096cefa418065e806baafa98df7cb878f2bca1e52ef97542b6e9b6c943",
       "source_sha256": "53233679546d269d4610f813cb2e6b77b809e720e8f18d0b613cde2ff2140758",
       "origin": "fluxvla-training/fluxvla/engines/runners/ddp_train_runner.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "21e776096cefa418065e806baafa98df7cb878f2bca1e52ef97542b6e9b6c943"
     },
     "fluxvla/engines/utils/__init__.py": {
       "sha256": "6d4c68325fa7273052c033341594f5168a449cb1ddaa99e89da014f11dcf2891",
       "source_sha256": "6d4c68325fa7273052c033341594f5168a449cb1ddaa99e89da014f11dcf2891",
       "origin": "fluxvla-training/fluxvla/engines/utils/__init__.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "6d4c68325fa7273052c033341594f5168a449cb1ddaa99e89da014f11dcf2891"
     },
     "fluxvla/engines/utils/builder.py": {
       "sha256": "d7ff57caad8a44b5062a590da1a7e8dc28cc300c896e9b6a22a8d1635a45c163",
       "source_sha256": "f9a4ec328c92efd95b25871abf7c0516903059bcec0ab8ce9712ddb58057a4ca",
       "origin": "fluxvla-training/fluxvla/engines/utils/builder.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "d7ff57caad8a44b5062a590da1a7e8dc28cc300c896e9b6a22a8d1635a45c163"
     },
     "fluxvla/engines/utils/model_utils.py": {
-      "sha256": "aad04beca30cbc1a26445485968bbb08e4f3b95990f3942cd759f8f2be1031f1",
+      "sha256": "c73dac51e85dbea28c54d26fd3f7b88dcef866b768822ac80ead3850c3646b6e",
       "source_sha256": "aad04beca30cbc1a26445485968bbb08e4f3b95990f3942cd759f8f2be1031f1",
       "origin": "fluxvla-training/fluxvla/engines/utils/model_utils.py",
-      "modified": false
+      "modified": true,
+      "cloud_snapshot_sha256": "c73dac51e85dbea28c54d26fd3f7b88dcef866b768822ac80ead3850c3646b6e"
     },
     "fluxvla/engines/utils/name_map.py": {
       "sha256": "f0b90c9d7e545d2387d368286d3188b87c81bf3fcc457d9903c799fecfc0420b",
       "source_sha256": "f0b90c9d7e545d2387d368286d3188b87c81bf3fcc457d9903c799fecfc0420b",
       "origin": "fluxvla-training/fluxvla/engines/utils/name_map.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "f0b90c9d7e545d2387d368286d3188b87c81bf3fcc457d9903c799fecfc0420b"
     },
     "fluxvla/engines/utils/overwatch.py": {
       "sha256": "d9feda8fbed62403b52412cad7874e0ec7eaf6b2553abde64bf2841cd5511274",
       "source_sha256": "d9feda8fbed62403b52412cad7874e0ec7eaf6b2553abde64bf2841cd5511274",
       "origin": "fluxvla-training/fluxvla/engines/utils/overwatch.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "d9feda8fbed62403b52412cad7874e0ec7eaf6b2553abde64bf2841cd5511274"
     },
     "fluxvla/engines/utils/registry.py": {
       "sha256": "8f49e39b4e06683ebe46fa9e1de24ec0c214996d5dc0915601ed2a8f52c286b8",
       "source_sha256": "8f49e39b4e06683ebe46fa9e1de24ec0c214996d5dc0915601ed2a8f52c286b8",
       "origin": "fluxvla-training/fluxvla/engines/utils/registry.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "8f49e39b4e06683ebe46fa9e1de24ec0c214996d5dc0915601ed2a8f52c286b8"
     },
     "fluxvla/engines/utils/root.py": {
       "sha256": "ad808e07b6b68fcedc612163cdbf706f42b8a19b5a6f0e4a7c76d5794113861e",
       "source_sha256": "ad808e07b6b68fcedc612163cdbf706f42b8a19b5a6f0e4a7c76d5794113861e",
       "origin": "fluxvla-training/fluxvla/engines/utils/root.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "ad808e07b6b68fcedc612163cdbf706f42b8a19b5a6f0e4a7c76d5794113861e"
     },
     "fluxvla/engines/utils/rtc_training.py": {
       "sha256": "7f34ebf952172e4da6d07f9a4b69c6bcc3057a01fb41ea816abd00cad307a436",
       "source_sha256": "7f34ebf952172e4da6d07f9a4b69c6bcc3057a01fb41ea816abd00cad307a436",
       "origin": "fluxvla-training/fluxvla/engines/utils/rtc_training.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "7f34ebf952172e4da6d07f9a4b69c6bcc3057a01fb41ea816abd00cad307a436"
     },
     "fluxvla/engines/utils/torch_utils.py": {
       "sha256": "36214a5175893a7fca9fa3de843785b8be169359e19463fdca058f0b9048ff1e",
       "source_sha256": "36214a5175893a7fca9fa3de843785b8be169359e19463fdca058f0b9048ff1e",
       "origin": "fluxvla-training/fluxvla/engines/utils/torch_utils.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "36214a5175893a7fca9fa3de843785b8be169359e19463fdca058f0b9048ff1e"
     },
     "fluxvla/models/__init__.py": {
       "sha256": "3dbe822bd0cfe23c254731a42a551e195f2e0538c8009f303a47671cc4f9ffa5",
       "source_sha256": "7db0b50552facbbcdfd1a2c8bec45e5ed44436889fbe514e2384b7f2d0089441",
       "origin": "fluxvla-training/fluxvla/models/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "3dbe822bd0cfe23c254731a42a551e195f2e0538c8009f303a47671cc4f9ffa5"
     },
     "fluxvla/models/backbones/__init__.py": {
       "sha256": "06ff11361f3ff797b5f88498f0bd4357e208bf303cd44a3fd4a8f293a1c5b999",
       "source_sha256": "29ae1d9fbc734ba2ef2abbecc28e053ee9e06d9e0630057ec03e8cc7831a8f82",
       "origin": "fluxvla-training/fluxvla/models/backbones/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "06ff11361f3ff797b5f88498f0bd4357e208bf303cd44a3fd4a8f293a1c5b999"
     },
     "fluxvla/models/backbones/llms/__init__.py": {
       "sha256": "9911081121b6271e7154f48431a8b190fcb2f0cfdbc7936c275aee2ebab47a76",
       "source_sha256": "d756d949cfdc329697f5546992c29ebaf6d82ce6a4edf23e78ed9df29770b8d0",
       "origin": "fluxvla-training/fluxvla/models/backbones/llms/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "9911081121b6271e7154f48431a8b190fcb2f0cfdbc7936c275aee2ebab47a76"
     },
     "fluxvla/models/backbones/llms/condition_gemma.py": {
-      "sha256": "d0ff6f24e72fa71e599eaf0b0665a909a4aec2e20b69b085e874a009e5a47247",
+      "sha256": "7a3be5b0abce842132ea957622313dc331f80730622a1d10733f25d331ff2b62",
       "source_sha256": "81d7ecff4a2a5839136f769f447c4f0fe40b167ecb29056ca887410346eddedd",
       "origin": "fluxvla-training/fluxvla/models/backbones/llms/condition_gemma.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "7a3be5b0abce842132ea957622313dc331f80730622a1d10733f25d331ff2b62"
     },
     "fluxvla/models/backbones/visions/__init__.py": {
       "sha256": "5ce190d8c0945ecc4e8aae8bb3f7855b656a39a3651ac910db7a66235e8a3083",
       "source_sha256": "259ff22c7f250f90ac2b78286c5b23d8c205292ba79a15c11bca84a286a87181",
       "origin": "fluxvla-training/fluxvla/models/backbones/visions/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "5ce190d8c0945ecc4e8aae8bb3f7855b656a39a3651ac910db7a66235e8a3083"
     },
     "fluxvla/models/backbones/visions/base_vision.py": {
       "sha256": "7d0ead4f9c6d7d459dffbe89a208b6c3fbd679372ebb94f8427654988c7e18ed",
       "source_sha256": "7d0ead4f9c6d7d459dffbe89a208b6c3fbd679372ebb94f8427654988c7e18ed",
       "origin": "fluxvla-training/fluxvla/models/backbones/visions/base_vision.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "7d0ead4f9c6d7d459dffbe89a208b6c3fbd679372ebb94f8427654988c7e18ed"
     },
     "fluxvla/models/backbones/visions/configs.py": {
       "sha256": "f755ef27a7d67a3174e9fb11f57b5936496acb8ae6fbc3ab2142ef7db0fb773d",
       "source_sha256": "f755ef27a7d67a3174e9fb11f57b5936496acb8ae6fbc3ab2142ef7db0fb773d",
       "origin": "fluxvla-training/fluxvla/models/backbones/visions/configs.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "f755ef27a7d67a3174e9fb11f57b5936496acb8ae6fbc3ab2142ef7db0fb773d"
     },
     "fluxvla/models/backbones/visions/siglip_vit.py": {
       "sha256": "cae5ba5139d129827c6cea8ac8890201054d0a58309f9a9f6c5848da61f78d5e",
       "source_sha256": "cae5ba5139d129827c6cea8ac8890201054d0a58309f9a9f6c5848da61f78d5e",
       "origin": "fluxvla-training/fluxvla/models/backbones/visions/siglip_vit.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "cae5ba5139d129827c6cea8ac8890201054d0a58309f9a9f6c5848da61f78d5e"
     },
     "fluxvla/models/projectors/__init__.py": {
       "sha256": "fd6fce43028ee5a205ed2c43859c853d18ccba47ca25cb67a04cbe7bc473d11f",
       "source_sha256": "5f601cf43961071045fd67c91e88b6c062c5306c77cea76e56f67e81a30a6e72",
       "origin": "fluxvla-training/fluxvla/models/projectors/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "fd6fce43028ee5a205ed2c43859c853d18ccba47ca25cb67a04cbe7bc473d11f"
     },
     "fluxvla/models/projectors/linear_projector.py": {
       "sha256": "112faf1f8970f08117e201fe02ac5b549580484f19abdda368783359bf136c5f",
       "source_sha256": "112faf1f8970f08117e201fe02ac5b549580484f19abdda368783359bf136c5f",
       "origin": "fluxvla-training/fluxvla/models/projectors/linear_projector.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "112faf1f8970f08117e201fe02ac5b549580484f19abdda368783359bf136c5f"
     },
     "fluxvla/models/vlas/__init__.py": {
-      "sha256": "b3ca7fc5dfa95012cb78c6ed3d358369c789daa920b782b20d56d73b2cec4978",
+      "sha256": "41efcaeff4691a476bc4d106043cb3bcf8cd77b6ac913a8ff5d0f2070a38c624",
       "source_sha256": "3a5a5fab3ac76bda8c62eaa23fa6b2b18343fe9494f201c2360c6dc6f2dc1d74",
       "origin": "fluxvla-training/fluxvla/models/vlas/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "41efcaeff4691a476bc4d106043cb3bcf8cd77b6ac913a8ff5d0f2070a38c624"
     },
     "fluxvla/models/vlas/base_vla.py": {
       "sha256": "032926f9ad020820691390f0e2b0915bdc4b14e406f5b4b8705f967e4fe57864",
       "source_sha256": "032926f9ad020820691390f0e2b0915bdc4b14e406f5b4b8705f967e4fe57864",
       "origin": "fluxvla-training/fluxvla/models/vlas/base_vla.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "032926f9ad020820691390f0e2b0915bdc4b14e406f5b4b8705f967e4fe57864"
     },
     "fluxvla/models/vlas/pi05_flowmatching.py": {
       "sha256": "8b656e0bf26adccac0ffd6068c40b33c08b0dc0c053653c8cfae775fdf9ab60f",
       "source_sha256": "8b656e0bf26adccac0ffd6068c40b33c08b0dc0c053653c8cfae775fdf9ab60f",
       "origin": "fluxvla-training/fluxvla/models/vlas/pi05_flowmatching.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "8b656e0bf26adccac0ffd6068c40b33c08b0dc0c053653c8cfae775fdf9ab60f"
     },
     "fluxvla/models/vlas/pi0_flowmatching.py": {
-      "sha256": "ecc3141dfeecef65eee93f133b8f3757f0788ec5cbe9b1e0a2807bf318b9a425",
+      "sha256": "b674cf9e7150ff499386e50e56d4da2b91d1281d705111f0289bdf7d261986af",
       "source_sha256": "dfe5dbfc918d0514be1ad06c085e0dbb5e157a0d0870705456d4f5e91a49d1f6",
       "origin": "fluxvla-training/fluxvla/models/vlas/pi0_flowmatching.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "b674cf9e7150ff499386e50e56d4da2b91d1281d705111f0289bdf7d261986af"
     },
     "fluxvla/optimizers/__init__.py": {
       "sha256": "4a39df13f79b5e056be91f62ec82d29d4df2724b8a3bdcca281479c4f568c618",
       "source_sha256": "4a39df13f79b5e056be91f62ec82d29d4df2724b8a3bdcca281479c4f568c618",
       "origin": "fluxvla-training/fluxvla/optimizers/__init__.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "4a39df13f79b5e056be91f62ec82d29d4df2724b8a3bdcca281479c4f568c618"
     },
     "fluxvla/optimizers/lr_scheduler_policies.py": {
       "sha256": "18ba51dafe401b3482301bd33906f3dc2f9d0eb0d3b3db1eaaef68a75ecdc633",
       "source_sha256": "18ba51dafe401b3482301bd33906f3dc2f9d0eb0d3b3db1eaaef68a75ecdc633",
       "origin": "fluxvla-training/fluxvla/optimizers/lr_scheduler_policies.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "18ba51dafe401b3482301bd33906f3dc2f9d0eb0d3b3db1eaaef68a75ecdc633"
     },
     "fluxvla/optimizers/optimizer.py": {
       "sha256": "a332db16f80de5f39a8efaa395cfa4215f0861022963a25000caccf7846d2c33",
       "source_sha256": "a332db16f80de5f39a8efaa395cfa4215f0861022963a25000caccf7846d2c33",
       "origin": "fluxvla-training/fluxvla/optimizers/optimizer.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "a332db16f80de5f39a8efaa395cfa4215f0861022963a25000caccf7846d2c33"
     },
     "fluxvla/optimizers/schedulers.py": {
       "sha256": "bc6665a171b792734502ed04d246d193631e2b2f18949655f2d02bad546fcbb7",
       "source_sha256": "bc6665a171b792734502ed04d246d193631e2b2f18949655f2d02bad546fcbb7",
       "origin": "fluxvla-training/fluxvla/optimizers/schedulers.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "bc6665a171b792734502ed04d246d193631e2b2f18949655f2d02bad546fcbb7"
     },
     "fluxvla/tokenizers/__init__.py": {
       "sha256": "89bc6195057e9c306951babfdd17f8b42aac1507d4ad0ea639bafc57d1b1804f",
       "source_sha256": "ca216a01a2f9fb4c2d7a687c7967ccec396915677df0906bfd942a658a157a9b",
       "origin": "fluxvla-training/fluxvla/tokenizers/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "89bc6195057e9c306951babfdd17f8b42aac1507d4ad0ea639bafc57d1b1804f"
     },
     "fluxvla/tokenizers/pretrained_tokenizer.py": {
       "sha256": "7a6e5deb9503532d3466f66b218d9ec977605c2afbdb6212b8a8fb0d48b45f96",
       "source_sha256": "7a6e5deb9503532d3466f66b218d9ec977605c2afbdb6212b8a8fb0d48b45f96",
       "origin": "fluxvla-training/fluxvla/tokenizers/pretrained_tokenizer.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "7a6e5deb9503532d3466f66b218d9ec977605c2afbdb6212b8a8fb0d48b45f96"
     },
     "fluxvla/transforms/__init__.py": {
-      "sha256": "11e202b3c47461d2993d5d74d4179447a488789ab3361b8206be54d453b4dd68",
+      "sha256": "01d1663f12beda06954b355683beb59bc54649025f0e81289480a2389da06ac2",
       "source_sha256": "f9cb0204613d89aff00b9b3a0944e7dce5906663aabb036fceb2abb9c95cde06",
       "origin": "fluxvla-training/fluxvla/transforms/__init__.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "01d1663f12beda06954b355683beb59bc54649025f0e81289480a2389da06ac2"
     },
     "fluxvla/transforms/normalize.py": {
       "sha256": "f53448039601e469d94bd23fbd41fc0e070f13ec897aec62a05374650d4040ae",
       "source_sha256": "6fa0682427186a79350ec699202f37b812916f9f70014c68ba9ae12196775bb9",
       "origin": "fluxvla-training/fluxvla/transforms/normalize.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "f53448039601e469d94bd23fbd41fc0e070f13ec897aec62a05374650d4040ae"
     },
     "fluxvla/transforms/prompters.py": {
       "sha256": "ad0ea0bf6749f599dcc2dfe57dddf549cb1dba5faebdfed0007e32aaa71ae963",
       "source_sha256": "e9c15261193e77815f913c440353d70273270528dda4a1938871c9b1c72f3383",
       "origin": "fluxvla-training/fluxvla/transforms/prompters.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "ad0ea0bf6749f599dcc2dfe57dddf549cb1dba5faebdfed0007e32aaa71ae963"
     },
     "fluxvla/transforms/transform_actions.py": {
       "sha256": "da67f7d1f81d08ae1aeb0b813df5b397b7aaf221a0804b8c30af11f138d83e8d",
       "source_sha256": "da67f7d1f81d08ae1aeb0b813df5b397b7aaf221a0804b8c30af11f138d83e8d",
       "origin": "fluxvla-training/fluxvla/transforms/transform_actions.py",
-      "modified": false
+      "modified": false,
+      "cloud_snapshot_sha256": "da67f7d1f81d08ae1aeb0b813df5b397b7aaf221a0804b8c30af11f138d83e8d"
     },
     "fluxvla/transforms/transform_images.py": {
       "sha256": "8284f01b8753fdf368da3522bd5fbca0a02765918ab273cdd859c3febcfdcd8e",
       "source_sha256": "a76807628e9b4ff1fbcabeea08107e1f2a58763949dad34dc5df4d86d9739c91",
       "origin": "fluxvla-training/fluxvla/transforms/transform_images.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "8284f01b8753fdf368da3522bd5fbca0a02765918ab273cdd859c3febcfdcd8e"
     },
     "fluxvla/transforms/transform_inputs.py": {
       "sha256": "887d2a1dfd9213a6d3661d2c51861faadaa6d540236da705dee9a297a023ab06",
       "source_sha256": "224b3c9853b861b564f5ec3e0de9c0ef8ba487d0ef22420934bb6146962093c1",
       "origin": "fluxvla-training/fluxvla/transforms/transform_inputs.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "887d2a1dfd9213a6d3661d2c51861faadaa6d540236da705dee9a297a023ab06"
     },
     "fluxvla/transforms/transform_prompts.py": {
       "sha256": "2c241597be54452a045ad83c82168f8f2f9341ed1208e3811ad02a383be93e90",
       "source_sha256": "b425e50fa6d3c3bf99ffe5a43ff9f49f5cdfcb1e9e5aaa632d8019cd8c96b9d5",
       "origin": "fluxvla-training/fluxvla/transforms/transform_prompts.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "2c241597be54452a045ad83c82168f8f2f9341ed1208e3811ad02a383be93e90"
     },
     "fluxvla/transforms/utils.py": {
       "sha256": "d1cdc509e7a492f51dd057ff1e67de2bbd654449889acfff4a5536f9f6b80058",
       "source_sha256": "518dc03b01093cd2b586304f1895ffdc330223084241ee9b8703397677228aba",
       "origin": "fluxvla-training/fluxvla/transforms/utils.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "d1cdc509e7a492f51dd057ff1e67de2bbd654449889acfff4a5536f9f6b80058"
     },
     "scripts/benchmark_video_cache.py": {
       "sha256": "58b1a092b30da1c15852b026c69bda59cb8045305ee98da84ac57331c219de1d",
-      "origin": "SOMA integration / cloud run configuration"
+      "origin": "SOMA integration / cloud run configuration",
+      "cloud_snapshot_sha256": "58b1a092b30da1c15852b026c69bda59cb8045305ee98da84ac57331c219de1d"
     },
     "scripts/build_video_cache.py": {
       "sha256": "92323bd097c596585c6354abe6cc9c109dfe1befc8516adb5a7d2de89279a8f2",
-      "origin": "SOMA integration / cloud run configuration"
+      "origin": "SOMA integration / cloud run configuration",
+      "cloud_snapshot_sha256": "92323bd097c596585c6354abe6cc9c109dfe1befc8516adb5a7d2de89279a8f2"
     },
     "scripts/train.py": {
       "sha256": "16b3e5fa058710b283a9a8079d15aefd6b6436524b01377b70d4c9c9f7cd181a",
       "source_sha256": "71391f096a47826b5f11373cdf1b8cbd851d7d823c9329d503a315bd3660f7d6",
       "origin": "fluxvla-training/scripts/train.py",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "16b3e5fa058710b283a9a8079d15aefd6b6436524b01377b70d4c9c9f7cd181a"
     },
     "scripts/train.sh": {
       "sha256": "05b78e23d2fbd6bad2e1ed220c43d38e950d47d804c9865322f18836b7dca15b",
       "source_sha256": "fb81904db07bbf954d776d3a21efe49286b63e24f2d3d3b903f70507c0383dc0",
       "origin": "fluxvla-training/scripts/train.sh",
-      "modified": true
+      "modified": true,
+      "cloud_snapshot_sha256": "05b78e23d2fbd6bad2e1ed220c43d38e950d47d804c9865322f18836b7dca15b"
     },
     "scripts/verify_video_cache.py": {
       "sha256": "dc658f83278808bbeb6b860a0980f26670cf3733401de04b9a8094ed152ac4a4",
-      "origin": "SOMA integration / cloud run configuration"
+      "origin": "SOMA integration / cloud run configuration",
+      "cloud_snapshot_sha256": "dc658f83278808bbeb6b860a0980f26670cf3733401de04b9a8094ed152ac4a4"
+    },
+    ".gitignore": {
+      "origin": "SOMA integration",
+      "sha256": "46b58cac161d711436e4b826ad80c4e86d10416ae45484815b72b9cd2da9e272"
+    },
+    "LICENSE": {
+      "origin": "SOMA integration",
+      "sha256": "cecd2666198765099a98b1a70308c0e8e48f784d727778874eabb937ca191c4f"
+    },
+    "NOTICE": {
+      "origin": "SOMA integration",
+      "sha256": "1a30271a4471bb9b7b8b12e38e34db71ceab7ef97bcbe87ff31c4f87383599b5"
+    },
+    "README.md": {
+      "origin": "SOMA integration",
+      "sha256": "38743e7ed6aa9621e83750dab253a6124d39c0e098c154f7a704dd7c03c24200"
+    },
+    "assets/fast/SHA256SUMS": {
+      "origin": "SOMA integration",
+      "sha256": "aa886bd930075b7cc8ceb851b26ef6b35fd1bf016c408cf2c94cf3add5b98d99"
+    },
+    "assets/fast/processing_action_tokenizer.py": {
+      "origin": "SOMA integration",
+      "sha256": "6f021ca1f4c1b194ab6fa399d80baf3d642eadb17efb8f73301e4ac401522c20"
+    },
+    "assets/fast/processor_config.json": {
+      "origin": "SOMA integration",
+      "sha256": "f40cfbb1020858fe1d48c0f946b0c1315a90d6e84aa82710036f24f4c167706a"
+    },
+    "assets/fast/special_tokens_map.json": {
+      "origin": "SOMA integration",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "assets/fast/tokenizer.json": {
+      "origin": "SOMA integration",
+      "sha256": "6507dd709287fd018882120c0071787f1f62bad9f180f1e8c5235bda1b71fa78"
+    },
+    "assets/fast/tokenizer_config.json": {
+      "origin": "SOMA integration",
+      "sha256": "b4030e2a13a0dea22e99d54c086fb320c71e66ad034ac4eba4301a0a27d5e5cd"
+    },
+    "configs/deploy/subtask_text.json": {
+      "origin": "SOMA integration",
+      "sha256": "2ae99544e5227339269dd46195c9678416f66d0b0c3dd088c797fd81a0ccd074"
+    },
+    "configs/pi05_subtask_architecture.py": {
+      "origin": "SOMA integration",
+      "sha256": "e5aed331c2b54abf5bb3cd224fd1d3a60e8a9f141dacd3c7066b4ecb82c6d70c",
+      "cloud_snapshot_sha256": "e5aed331c2b54abf5bb3cd224fd1d3a60e8a9f141dacd3c7066b4ecb82c6d70c"
+    },
+    "configs/pi05_subtask_fast.py": {
+      "origin": "SOMA integration",
+      "sha256": "879bc18014efd07055ee4e8fc1ded911e6098870ff3d05eb11f8ef3eb8fe5270",
+      "cloud_snapshot_sha256": "12b850f4e4b777e02eee0e65d50a0c2c4d2d82e82935c15b0f475f16feef1377"
+    },
+    "configs/subtask/fabric106.json": {
+      "origin": "SOMA integration",
+      "sha256": "8f37e919e7a2656e129ce51dac82aad822e12b02cc7d5bca6ba06c9690966a45"
+    },
+    "docs/plans/pi05_subtask_architecture_execution.md": {
+      "origin": "SOMA integration",
+      "sha256": "ae4b27ed9a42e30262818eb2969bd5cff77858cf478c9e418ba1bfaa073c9534"
+    },
+    "docs/plans/pi05_subtask_fast_reproduction.md": {
+      "origin": "SOMA integration",
+      "sha256": "12aa9e6eb5562ddfd59e25fb1cfdd4f541e1f733778742480387d0775f81d675"
+    },
+    "docs/plans/pi05_subtask_kv_insulation_execution.md": {
+      "origin": "SOMA integration",
+      "sha256": "ff1576600e9071e5cc23920a13d94887c2a02e34e14a875a5e3301c24fea6f44"
+    },
+    "docs/plans/pi05_subtask_todo.md": {
+      "origin": "SOMA integration",
+      "sha256": "ff29669fd552208334408a4c5dfa71ba2b9ea5cb64954fe1c8a26abfb91ee53e"
+    },
+    "docs/research/pi05_subtask.md": {
+      "origin": "SOMA integration",
+      "sha256": "ce8c301f3767556832492816582ef2cd009470b602a6c6574ac88d4cfe35591d"
+    },
+    "docs/subtask_workflow.md": {
+      "origin": "SOMA integration",
+      "sha256": "0638820d053f398a6934db4bedc69c9644575a359c570745fedcf0fd01a5bf59"
+    },
+    "fluxvla/inference/__init__.py": {
+      "origin": "SOMA integration",
+      "sha256": "81cee1f01f8641eaba91d5756ff3c2257603a74f38c57309dd086b24c1d63bef"
+    },
+    "fluxvla/inference/bundle.py": {
+      "origin": "SOMA integration",
+      "sha256": "0077c772add4c288bedd315637f975c08c6264139710133dd9e4e792110845ef"
+    },
+    "fluxvla/inference/preprocessing.py": {
+      "origin": "SOMA integration",
+      "sha256": "a0a014234655d44ea476bcfad75901790d14a3c9513edea710eb560c9914a369"
+    },
+    "fluxvla/inference/soma_adapter.py": {
+      "origin": "SOMA integration",
+      "sha256": "5e606446a1eaa1da9c573e95d67b70e105e82836d64ad9db5005c7b9470eef6f"
+    },
+    "fluxvla/inference/subtask.py": {
+      "origin": "SOMA integration",
+      "sha256": "583ef3a0f2ed733c43372aafa974ecf759a31325e6d078996edcf30da0bc3d82"
+    },
+    "fluxvla/inference/subtask_hold.py": {
+      "origin": "SOMA integration",
+      "sha256": "5172e654150f9c2e9226b0c9ca39c1d730aa26aa2f3dc3eacb63d60d72019f3c"
+    },
+    "fluxvla/inference/subtask_stability.py": {
+      "origin": "SOMA integration",
+      "sha256": "b7c8a3bbe10a5fc48aabf82fbab0a6f8ef28ed8143314ab43bf4e87f74bd4616"
+    },
+    "fluxvla/inference/text.py": {
+      "origin": "SOMA integration",
+      "sha256": "008e58c22af4e67629ae390d3703df09f9871dea56edb4d308364b3843d27af3"
+    },
+    "fluxvla/models/vlas/pi05_subtask.py": {
+      "origin": "SOMA integration",
+      "sha256": "a4460a37901e49e1a6cd92db014e5bab9e72985555a515983a55b740bd2ba38b",
+      "cloud_snapshot_sha256": "3477329b1e48db9040dcb0cd4b0f4086c0675ad235f5284cf8db572c39f2b45a"
+    },
+    "fluxvla/models/vlas/subtask_kv.py": {
+      "origin": "SOMA integration",
+      "sha256": "5e9be1eb5e8a792affc79e22de037d28484169f5a262efb74c5d2d14963b2f7b",
+      "cloud_snapshot_sha256": "f07e8cb9f2d405079c2b22b189d15b1a8f55e00d61fcce7e82fd8072f93bf57f"
+    },
+    "fluxvla/models/vlas/subtask_runtime.py": {
+      "origin": "SOMA integration",
+      "sha256": "8054d3a963efaf5e83a9efd60d8c7167d699c05c5bf864b2c0b042f11bbca270",
+      "cloud_snapshot_sha256": "249226a23b4a4fdf7efd1a21e39acdd469f9abbce861f8ef4562d4a7f851f68b"
+    },
+    "fluxvla/training/__init__.py": {
+      "origin": "SOMA integration",
+      "sha256": "fa086a5d5f8bdf57b00744eec851e360047d14d5bcd743d62e3aaf746807c128"
+    },
+    "fluxvla/training/ema.py": {
+      "origin": "SOMA integration",
+      "sha256": "f52aa0921b97dc7ecc551a5bfafbf3dd3c385ecb94efb43ba11762724ee8b2e6"
+    },
+    "fluxvla/training/presets/__init__.py": {
+      "origin": "SOMA integration",
+      "sha256": "fa086a5d5f8bdf57b00744eec851e360047d14d5bcd743d62e3aaf746807c128"
+    },
+    "fluxvla/training/presets/pi05_piper.py": {
+      "origin": "SOMA integration",
+      "sha256": "3ec3a23da5d487798bee2932547b1a6d8ec48023d93cfff6bc496303c0f0aaf4"
+    },
+    "fluxvla/training/presets/pi05_subtask_fast.py": {
+      "origin": "SOMA integration",
+      "sha256": "78ac056cdf5fbfc73ba9ec09f65aee55dd406bb82e343f07776255d9d34134f5"
+    },
+    "fluxvla/training/subtask/__init__.py": {
+      "origin": "SOMA integration",
+      "sha256": "fa086a5d5f8bdf57b00744eec851e360047d14d5bcd743d62e3aaf746807c128"
+    },
+    "fluxvla/training/subtask/checkpoints.py": {
+      "origin": "SOMA integration",
+      "sha256": "8efd2f6113c0087ea30cd5fad8400183d695bf5c5bc756c07008e81f0c5a0afc",
+      "cloud_snapshot_sha256": "27fc3bef70722eb46bfc1a718e9ab4883b67fe496cbfae3368f6559d569c4f4d"
+    },
+    "fluxvla/training/subtask/common.py": {
+      "origin": "SOMA integration",
+      "sha256": "2f9e72530f5be775d375daff3fcb2cbb1a114349cdd1e97342a204f64f7bb280",
+      "cloud_snapshot_sha256": "2f9e72530f5be775d375daff3fcb2cbb1a114349cdd1e97342a204f64f7bb280"
+    },
+    "fluxvla/training/subtask/fixtures.py": {
+      "origin": "SOMA integration",
+      "sha256": "00881122cdcec75c4b388a311b02244a95e68ccd16cb22788ae0ceb94f84bf07"
+    },
+    "fluxvla/training/subtask/prepare.py": {
+      "origin": "SOMA integration",
+      "sha256": "758ad3c1ec95c63df5626df27485090fc39ebf078ebaf718e51f94087805af02",
+      "cloud_snapshot_sha256": "15e1fe31dfa789d3ff0c308b75a46f56884ba2c97d72da1252bdb767998237c1"
+    },
+    "fluxvla/training/subtask/run.py": {
+      "origin": "SOMA integration",
+      "sha256": "e2d38ee2e9842bcaf6e57899d4c1dae2b9ddebff0f7bd976765d94250d410b51",
+      "cloud_snapshot_sha256": "675ae682514e02afd21b7f1f98cadc4ce3ae86aaa8b7a16c7e5982e73b0d5562"
+    },
+    "fluxvla/training/subtask/train.py": {
+      "origin": "SOMA integration",
+      "sha256": "a561c72a3018f19736425fd025c0678967348bcfb4b5fdcb1cdd191f1a32c943",
+      "cloud_snapshot_sha256": "05f774ca6a78fec9fc7594e5818b03def66f7c6c746e40a814078c4d4b8a3fe6"
+    },
+    "fluxvla/transforms/subtask_fast_prompts.py": {
+      "origin": "SOMA integration",
+      "sha256": "e80de6c18a21c7bc318cc2d5af10aa70687632746da9b9c5e5c02f8783c8d3e3",
+      "cloud_snapshot_sha256": "e80de6c18a21c7bc318cc2d5af10aa70687632746da9b9c5e5c02f8783c8d3e3"
+    },
+    "fluxvla/transforms/subtask_prompts.py": {
+      "origin": "SOMA integration",
+      "sha256": "fb6fa6741c0df700f64661af84b8232c989909987e88dc8b79be0e6b5cfdf810",
+      "cloud_snapshot_sha256": "fb6fa6741c0df700f64661af84b8232c989909987e88dc8b79be0e6b5cfdf810"
+    },
+    "pyproject.toml": {
+      "origin": "SOMA integration",
+      "sha256": "94caa597d9764ddf42b58f55fb3d303781b1960b7af0da64b6b864af17daa284"
+    },
+    "scripts/architecture/check_fast_prompt_layout.py": {
+      "origin": "SOMA integration",
+      "sha256": "aac5f4b08eeae32323f20d1100b381666153752efee3296acae7be7182ad89e1",
+      "cloud_snapshot_sha256": "aac5f4b08eeae32323f20d1100b381666153752efee3296acae7be7182ad89e1"
+    },
+    "scripts/architecture/inspect_shoes_video.py": {
+      "origin": "SOMA integration",
+      "sha256": "817f61fca76b84128eed4fbd2ecfe7286980eeff011e27ec5f617133e73ef0d3",
+      "cloud_snapshot_sha256": "817f61fca76b84128eed4fbd2ecfe7286980eeff011e27ec5f617133e73ef0d3"
+    },
+    "scripts/architecture/make_shoes_review_gallery.py": {
+      "origin": "SOMA integration",
+      "sha256": "9923623c8db36cb404255003311606aca376c1c5dd91c0e76ede50cd8e1c8ed4",
+      "cloud_snapshot_sha256": "9923623c8db36cb404255003311606aca376c1c5dd91c0e76ede50cd8e1c8ed4"
+    },
+    "scripts/architecture/prepare_fast_tokens.py": {
+      "origin": "SOMA integration",
+      "sha256": "e9d7c0786b1c97de75a9f845775c46a424d36be48a220da62e03ba602dc0887d",
+      "cloud_snapshot_sha256": "e9d7c0786b1c97de75a9f845775c46a424d36be48a220da62e03ba602dc0887d"
+    },
+    "scripts/architecture/prepare_lerobot_fixture.py": {
+      "origin": "SOMA integration",
+      "sha256": "94a0ddd8962032a4136c72371ff8f194482452ef8e7ec4f4931ed15bed74150d",
+      "cloud_snapshot_sha256": "94a0ddd8962032a4136c72371ff8f194482452ef8e7ec4f4931ed15bed74150d"
+    },
+    "scripts/architecture/prepare_shoes_subtasks.py": {
+      "origin": "SOMA integration",
+      "sha256": "95ce753d77f3a019d25a7896962a810c7c525032611e0715adfca71dd628cb0c",
+      "cloud_snapshot_sha256": "95ce753d77f3a019d25a7896962a810c7c525032611e0715adfca71dd628cb0c"
+    },
+    "scripts/architecture/run_fast_stage1.py": {
+      "origin": "SOMA integration",
+      "sha256": "3e28ba0edd8840456c779f83e801c7d3d53b2655ace930973a2eb587ba1ca89c",
+      "cloud_snapshot_sha256": "e03b4d32caf20f11248f17c63db3da4b443e1eefaaabdaaf54c9582a658480a1"
+    },
+    "scripts/architecture/run_pi05_kv_experiment.py": {
+      "origin": "SOMA integration",
+      "sha256": "feec0ec60e55de4850d50ef778079bf7b3102e3fa6419b4c5d966b4da2d490ac",
+      "cloud_snapshot_sha256": "feec0ec60e55de4850d50ef778079bf7b3102e3fa6419b4c5d966b4da2d490ac"
+    },
+    "scripts/architecture/run_pi05_subtask_probe.py": {
+      "origin": "SOMA integration",
+      "sha256": "0705c9eb13557b2715afeb564cedc051ec40418573af8d5985a7995ef1ec4ce8",
+      "cloud_snapshot_sha256": "0705c9eb13557b2715afeb564cedc051ec40418573af8d5985a7995ef1ec4ce8"
+    },
+    "scripts/architecture/run_shoes_subtask_experiment.py": {
+      "origin": "SOMA integration",
+      "sha256": "63acb48da6b1ca6d5ff24e8efac2660bcef4f519d75b1ec6b4013afeda6a3c07",
+      "cloud_snapshot_sha256": "63acb48da6b1ca6d5ff24e8efac2660bcef4f519d75b1ec6b4013afeda6a3c07"
+    },
+    "scripts/architecture/sync_to_training_host.sh": {
+      "origin": "SOMA integration",
+      "sha256": "815377750b139c726eb782f3c23eae45a15671589f066afa38bd88edc56a8f45",
+      "cloud_snapshot_sha256": "96c8e110fef9351e95df43f9403e2af9af99f3e3185ed4cef8713d7ad14e47f8"
+    },
+    "scripts/architecture/verify_pi05_kv_checkpoints.py": {
+      "origin": "SOMA integration",
+      "sha256": "7d0a23c5ff000178cbcc99b61ae993673f2c063ea672cf699822bfd049b8ec9f",
+      "cloud_snapshot_sha256": "7d0a23c5ff000178cbcc99b61ae993673f2c063ea672cf699822bfd049b8ec9f"
+    },
+    "scripts/evaluate_subtask.py": {
+      "origin": "SOMA integration",
+      "sha256": "fd19cd87c9a636bb3d3b99f91736c2af76c1ee2c3c83fde0d135fd3a8e1b93c5"
+    },
+    "scripts/export_checkpoint.py": {
+      "origin": "SOMA integration",
+      "sha256": "952962286af14bc098965561e624c2eea0389842faa9fe5260a9f2028ebb21ea"
+    },
+    "scripts/serve_policy.py": {
+      "origin": "SOMA integration",
+      "sha256": "d5f658f9f3510b3d787dc5a635bf63a6666e9c8c162c4dce3c5659d15f555860"
+    },
+    "scripts/train_subtask.py": {
+      "origin": "SOMA integration",
+      "sha256": "1829988dffce72f3c0c9414a8713105b279026c520f8fe75bf6a81d2576fed25"
+    },
+    "tests/test_adarms_parity.py": {
+      "origin": "SOMA integration",
+      "sha256": "ee46fd49cd426065e35835df46108e649c2d8435bb78aecebfb311978ce28ae0",
+      "cloud_snapshot_sha256": "ee46fd49cd426065e35835df46108e649c2d8435bb78aecebfb311978ce28ae0"
+    },
+    "tests/test_decode_mode.py": {
+      "origin": "SOMA integration",
+      "sha256": "067afbc3af844a76d35c7170189e90c66ce9645dc1bac4a3f3ab6b8e8a7c4b69",
+      "cloud_snapshot_sha256": "067afbc3af844a76d35c7170189e90c66ce9645dc1bac4a3f3ab6b8e8a7c4b69"
+    },
+    "tests/test_deploy_precision_contract.py": {
+      "origin": "SOMA integration",
+      "sha256": "3c442297a8c22845e734fbd471482235378e8cada11900db4f8a96c9044b57f9",
+      "cloud_snapshot_sha256": "3c442297a8c22845e734fbd471482235378e8cada11900db4f8a96c9044b57f9"
+    },
+    "tests/test_ema_and_loss_normalization.py": {
+      "origin": "SOMA integration",
+      "sha256": "86196eaf55ab4513e85597b215968494d86c75c94d433a480d6e5b37f0a9d32b",
+      "cloud_snapshot_sha256": "86196eaf55ab4513e85597b215968494d86c75c94d433a480d6e5b37f0a9d32b"
+    },
+    "tests/test_inference_policy.py": {
+      "origin": "SOMA integration",
+      "sha256": "b49d1c434ac3b3e7e207fb3271f82199b52fe0c0e740f2ccb1c3b5e1f71b7779"
+    },
+    "tests/test_mask_parity.py": {
+      "origin": "SOMA integration",
+      "sha256": "1a13aab2e1744bae6ca62d554eae0eaaf76a5dc3ad54a1fdc86698c90960efb6",
+      "cloud_snapshot_sha256": "1a13aab2e1744bae6ca62d554eae0eaaf76a5dc3ad54a1fdc86698c90960efb6"
+    },
+    "tests/test_pipeline_checkpoints.py": {
+      "origin": "SOMA integration",
+      "sha256": "0b0dbd8e686baf1449de5acb3e2d71d668a70937efc3c10bfab5b502ff0d00fe",
+      "cloud_snapshot_sha256": "133c147b9ea4c850d611412d4ad46f5d579176f2a2f6ba2fc2afdc400ffe3d89"
+    },
+    "tests/test_pipeline_final_only_integration.py": {
+      "origin": "SOMA integration",
+      "sha256": "ba49318b28fdfc60560d05b5a5131d2004cd6e87b719aa81c2ac20f5ad23c89f",
+      "cloud_snapshot_sha256": "51114d64811f6841e4d3865a44835f3842c1810929b5f9612c00856dcd8397cc"
+    },
+    "tests/test_rope_parity.py": {
+      "origin": "SOMA integration",
+      "sha256": "937054edfd0e665dd9f619d4d135b9d6be8f74363f0ecd59b89beadeecb6b194",
+      "cloud_snapshot_sha256": "937054edfd0e665dd9f619d4d135b9d6be8f74363f0ecd59b89beadeecb6b194"
+    },
+    "tests/test_rope_precision.py": {
+      "origin": "SOMA integration",
+      "sha256": "66baf745ddfeec32ea3afedb22c9d9f2f29366faf1ef5daccb59ca96eea7a2cb",
+      "cloud_snapshot_sha256": "66baf745ddfeec32ea3afedb22c9d9f2f29366faf1ef5daccb59ca96eea7a2cb"
+    },
+    "tests/test_sdpa_broadcast_kv.py": {
+      "origin": "SOMA integration",
+      "sha256": "df9581c1977d4005ca8a4de2ee0d187a629d4641fcca2cbe4798172fffa62d98",
+      "cloud_snapshot_sha256": "df9581c1977d4005ca8a4de2ee0d187a629d4641fcca2cbe4798172fffa62d98"
+    },
+    "tests/test_subtask.py": {
+      "origin": "SOMA integration",
+      "sha256": "3c1d39f3ea2df6b13f7d230378239f3d25dc42a8f5e3fad49727baf54daa3fdd",
+      "cloud_snapshot_sha256": "94f87af83692b261daa9c88fc496e0fa4fc0c864aed00cab79bc7e8dc6951356"
+    },
+    "tests/test_subtask_fast.py": {
+      "origin": "SOMA integration",
+      "sha256": "a03e3e5c5c30334465a7b14f0f071cdc0e78e5cc787e949c3b16a1ecb4f9f09e",
+      "cloud_snapshot_sha256": "a03e3e5c5c30334465a7b14f0f071cdc0e78e5cc787e949c3b16a1ecb4f9f09e"
+    },
+    "tests/test_subtask_fast_config.py": {
+      "origin": "SOMA integration",
+      "sha256": "4bf6744c474fadb454b6c00051a89d2fbcb53a62f91ce3380329b88c8c252579",
+      "cloud_snapshot_sha256": "4bf6744c474fadb454b6c00051a89d2fbcb53a62f91ce3380329b88c8c252579"
+    },
+    "tests/test_subtask_fast_model.py": {
+      "origin": "SOMA integration",
+      "sha256": "6e611a653cb6a1b416992448c6813e19dff44be72d252ce7f919557255f3bcdf",
+      "cloud_snapshot_sha256": "6e611a653cb6a1b416992448c6813e19dff44be72d252ce7f919557255f3bcdf"
+    },
+    "tests/test_subtask_hold.py": {
+      "origin": "SOMA integration",
+      "sha256": "c3758d91a68ac74da6b24206c7e113256032df72993c1ff30328c87588b02c16"
+    },
+    "tests/test_subtask_pipeline.py": {
+      "origin": "SOMA integration",
+      "sha256": "c5e14fc3cae1efe2482dce79ecbb308c186a69bb0063411ad14cc46bedff15ab",
+      "cloud_snapshot_sha256": "31ab1ffd3bd153511f1613681728f8a211b4df805623b576c3c69a413565f0b0"
+    },
+    "tests/test_subtask_stability.py": {
+      "origin": "SOMA integration",
+      "sha256": "33ea5d98a7a748ccd28b30dda0c51f2ada1aeb7ccc38d201abfdeea175c666de"
+    },
+    "tests/test_training.py": {
+      "origin": "SOMA integration",
+      "sha256": "d62743e153cdd4d283d6dc38d0ff3fb3a60cd1ddbfd4a06c3b41240dbfe570a4",
+      "cloud_snapshot_sha256": "d62743e153cdd4d283d6dc38d0ff3fb3a60cd1ddbfd4a06c3b41240dbfe570a4"
+    },
+    "tests/test_video_cache.py": {
+      "origin": "SOMA integration",
+      "sha256": "35ef9204d225a2e037c9205bda36b131e1f4c8a1ea68b83720e4eeb384e7a1c2",
+      "cloud_snapshot_sha256": "35ef9204d225a2e037c9205bda36b131e1f4c8a1ea68b83720e4eeb384e7a1c2"
+    },
+    "docs/validation_20261020.json": {
+      "origin": "SOMA integration",
+      "sha256": "646220b0e1912572ca3ed65711a342e4ddc8ff5cbff74923f43fe165532798b2"
     }
-  }
+  },
+  "integration_date": "2026-10-20",
+  "cloud_source": "subtask130_20261019/code, training run runs_ae8_20261020",
+  "cloud_archive_sha256": "8571f08e8f246450cfa5e209ecdd810f8a9685027d36ee08b43307d104a99051"
 }

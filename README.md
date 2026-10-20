@@ -2,7 +2,8 @@
 
 PI0.5 Piper 与 subtask + FAST + flow 的模型、训练、导出和推理代码。
 
-**整理状态：初始公开版本，集成验证仍在进行。请勿将此提交直接作为真机发布版本。**
+Subtask 完整流程见 [训练、导出与推理说明](docs/subtask_workflow.md)。
+本仓库提供模型与推理服务；真机控制由独立部署框架负责。
 
 新增入口：`scripts/train_subtask.py`、`scripts/export_checkpoint.py`、
 `scripts/evaluate_subtask.py` 和 `scripts/serve_policy.py`。
@@ -36,7 +37,7 @@ scripts/build_video_cache.py    缓存构建
 scripts/verify_video_cache.py   对比原视频像素
 scripts/benchmark_video_cache.py 压缩实验（不接入训练）
 fluxvla/datasets/cache/         Zstd 块读取、构建和索引管理
-experiments/cloud_20261016/     当时云端配置及压缩实验结果
+experiments/                   本地实验结果（不提交 Git）
 tests/                         缓存、分片和恢复兼容性检查
 ```
 

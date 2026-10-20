@@ -1,3 +1,5 @@
+> 历史实验计划，保留研究过程。当前入口与已落实的条件语义见 [subtask_workflow.md](../subtask_workflow.md)。
+
 # π0.5 Subtask 架构实验执行计划
 
 更新日期：2026-10-17。状态：用户已授权开始实验；首批架构实现、E0/E1 和 E2 identity 已运行；新增用户授权的鞋子视觉小切片 E3 已完成联合训练、消融及新进程重载。完整实验计划仍未全部完成。详见 [首轮执行报告](../../experiments/pi05_subtask_architecture/REPORT.md)。

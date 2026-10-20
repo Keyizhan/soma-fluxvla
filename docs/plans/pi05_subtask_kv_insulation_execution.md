@@ -1,3 +1,5 @@
+> 历史实验计划，保留研究过程。当前入口与已落实的条件语义见 [subtask_workflow.md](../subtask_workflow.md)。
+
 # π0.5 梯度隔离与 KV 缓存实验
 
 2026-10-17。用户明确授权对齐 Ke-Wang 的梯度隔离、文本 KV、动作 prefix KV 并运行一组实验。实现和实验设计为AI工作；参考社区 commit `385d0e8330397ecfa29e9b675042b424c4d5386c`，不称为官方内部实现。

@@ -81,6 +81,20 @@ def test_wire_adapter_carries_deltas_and_scale_one(tmp_path):
     client=Pi05SubtaskClientAdapter(adapter.metadata)
     np.testing.assert_allclose(client.to_absolute(result),p.infer(payload)['actions'],atol=1e-8)
     assert adapter.metadata.client_config['gripper_scale'] == 1
+    from soma_deploy.serving.ws_server import PolicyServer
+    from soma_deploy.serving import msgpack_numpy
+    from websockets.sync.client import connect
+    server=PolicyServer(adapter.metadata,adapter.infer).start_in_thread()
+    try:
+        with connect(f'ws://127.0.0.1:{server.bound_port}',open_timeout=5) as ws:
+            metadata=msgpack_numpy.unpackb(ws.recv(timeout=5))
+            assert metadata['client_adapter']=='pi05_subtask'
+            ws.send(msgpack_numpy.packb(dict(type='infer',request_id='offline-test',payload=payload)))
+            reply=msgpack_numpy.unpackb(ws.recv(timeout=5))
+            assert reply['ok'], reply
+            np.testing.assert_allclose(client.to_absolute(reply['data']),p.infer(payload)['actions'],atol=1e-8)
+    finally:
+        server.stop()
 
 
 def test_legacy_contract_requires_explicit_audited_override():
@@ -108,3 +122,35 @@ def test_bundle_rejects_corruption_and_path_escape(tmp_path):
     files['../outside']={}
     manifest.write_text(json.dumps(dict(files=files)))
     with pytest.raises(ValueError,match='escapes'):verify_bundle_files(tmp_path)
+
+
+def test_new_export_state_arithmetic_matches_training_without_clipping():
+    from fluxvla.training.subtask.common import normalize
+    from fluxvla.inference.preprocessing import normalize_state
+    rng=np.random.default_rng(1702)
+    stats=dict(q01=rng.normal(size=14).tolist(),q99=(rng.normal(size=14)+10).tolist())
+    states=rng.normal(size=(10,14)).astype(np.float32)*10
+    for state in states:
+        np.testing.assert_array_equal(normalize_state(state,stats,quantile_dtype=np.float64),normalize(state,stats))
+
+
+def test_offline_evaluation_reports_physical_errors_without_using_gt_labels(tmp_path):
+    import runpy
+    from pathlib import Path
+    evaluate=runpy.run_path(str(Path(__file__).parents[1]/'scripts/evaluate_subtask.py'))['evaluate']
+    p,payload=setup_policy(subtask_switch_confirmations=1)
+    target=p.infer(payload)['actions'].copy()
+    target[:,JOINTS] += .1
+    target[:,GRIPPERS] += .02
+    target[-1] = 99
+    mask=np.ones_like(target,dtype=bool);mask[-1]=False
+    arrays=dict(states=np.stack([payload['state']]*2),images=np.zeros((2,9,16,16),np.uint8),
+                actions=np.stack([target]*2),action_masks=np.stack([mask]*2))
+    records=[dict(episode=0,frame=i,overall_task='sort',subtask='GT label not generated') for i in range(2)]
+    result=evaluate(p,arrays,records,tmp_path/'evaluation')
+    assert result['exact_subtask_accuracy']==0
+    assert result['joint_rmse_rad']==pytest.approx(.1,abs=1e-7)
+    assert result['gripper_mae_m']==pytest.approx(.02,abs=1e-7)
+    assert result['within_gt_interval_comparisons']==1
+    events=[json.loads(line) for line in (tmp_path/'evaluation/predictions.jsonl').read_text().splitlines()]
+    assert all(e['subtask']=='A.;' and len(e['trace']['generated_token_ids'])==64 for e in events)

@@ -392,3 +392,24 @@ def test_explicit_fp32_text_decode_disables_outer_autocast(model):
         c=model.generate_subtask(**kwargs,use_cache=True)
     torch.testing.assert_close(a['logits'],c['logits'],rtol=2e-5,atol=2e-6)
     assert torch.equal(a['token_ids'],c['token_ids'])
+
+
+@pytest.mark.parametrize('stop_kind', ['limit', 'eos', 'sentinel'])
+def test_returned_generation_cache_includes_final_emitted_token(model, monkeypatch, stop_kind):
+    b=high_batch()
+    images,ids,valid,masks=(b[k][:1] for k in ('images','hl_input_ids','hl_valid_mask','img_masks'))
+    def project(hidden):
+        scores=torch.full((1,64),-100.,device=hidden.device)
+        scores[:,9]=100.
+        return scores
+    monkeypatch.setattr(model,'project_text',project)
+    result=model.generate_subtask(images,ids,valid,masks,
+        eos_token_id=9 if stop_kind=='eos' else 63,pad_token_id=0,
+        max_new_tokens=2,use_cache=True,return_cache=True,
+        stop_token_ids=[9] if stop_kind=='sentinel' else None)
+    prefix=model.embed_prefix(images,ids,masks,valid)[0].shape[1]
+    expected=prefix+int(result['lengths'][0])
+    assert result['cache'].length == expected
+    assert result['cache'].valid[0,expected-1]
+    view=result['cache'].prefix(prefix)
+    assert view.length == prefix and result['cache'].length == expected

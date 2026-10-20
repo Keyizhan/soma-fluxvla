@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-20",
+  "full_weight_regression": {
+    "samples": 8,
+    "same_generated_tokens": true,
+    "same_labels": true,
+    "normalized_max_abs_difference": 0.0,
+    "semantic_max_abs_difference": 0.0,
+    "scope": "8 saved ep39 observations, step750, matched text mode/images/state/noise; numerical regression only, not task success",
+    "hardware_commands": false
+  },
+  "tests": {
+    "main_suite": {
+      "passed": 142,
+      "skipped": 1,
+      "skip_reason": "opt-in DDP integration, run separately"
+    },
+    "focused_inference_and_cache": {
+      "passed": 10,
+      "includes": "physical units, GT exclusion, complete token output, cache final token, loopback websocket roundtrip"
+    },
+    "cpu_ddp": {
+      "passed": 1,
+      "world_size": 2,
+      "details": "two stages, full/deploy tensor equality, final-only optimizer, warm-start and finalization retry"
+    },
+    "portable_fixture": {
+      "passed": 1,
+      "cache_verified": true
+    }
+  },
+  "checks": {
+    "ruff": true,
+    "shell_syntax": true,
+    "pip_check": true,
+    "wheel_build": true,
+    "cli_help": true,
+    "full_checkpoint_export_cli": true,
+    "hardware_commands": false
+  },
+  "limitations": [
+    "No full-scale 8-GPU retraining performed during integration.",
+    "Saved ep39 observations verify numerical regression, not new-training validation accuracy or robot success.",
+    "soma-deploy is an external optional protocol/runtime dependency; live deployment was not changed."
+  ]
+}

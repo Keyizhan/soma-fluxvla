@@ -127,6 +127,7 @@ def bundle_assets(cfg, model_cfg, metadata):
             high_level_text_attention='causal', generation_is_experimental=True),
         action_encoding='12 joints delta to anchor; 2 grippers absolute meters',
         normalization='train-only q01/q99; no clipping', invalid_padding='masked zero',
+        state_normalization='float64_quantiles_then_float32',
         cache_identity=metadata['cache_identity'], stage=metadata['stage'], update=metadata['update'],
         preset=metadata['preset'], smoke=metadata.get('smoke', False))
     return native, samples['normalization'], contract

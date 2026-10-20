@@ -10,3 +10,11 @@ fluxvla for compatibility with existing configuration and model checkpoints.
 
 SOMA changes: training-only package registration, portable Piper configuration,
 explicit predecoded cache integration, cache lifecycle validation and tooling.
+
+Additional SOMA integration: canonical two-stage subtask pipeline, portable full-state
+exports, shared physical-unit inference, cache fixes and text transition gating.
+
+FAST assets under assets/fast originate from Physical Intelligence's FAST repository:
+https://huggingface.co/physical-intelligence/fast (Apache-2.0 per its model card).
+The local processor includes Transformers compatibility changes. Asset hashes are
+recorded in assets/fast/SHA256SUMS. Base PI0.5 weights are not redistributed.

@@ -73,6 +73,14 @@ class SubtaskPolicy:
         self.state_stats = quantiles(statistics, "state")
         self.action_stats = quantiles(statistics, "action")
         self.contract = contract or {}
+        arithmetic = self.contract.get("state_normalization", "float32_quantiles")
+        if arithmetic not in {"float32_quantiles", "float64_quantiles_then_float32"}:
+            raise ValueError("unsupported state normalization arithmetic")
+        self.quantile_dtype = np.float64 if arithmetic == "float64_quantiles_then_float32" else np.float32
+        self.state_stats = {
+            k: np.asarray(statistics.get("private", statistics)["state"][k], dtype=self.quantile_dtype)
+            for k in ("q01", "q99")
+        }
         self.reset()
 
     def reset(self):
@@ -104,6 +112,10 @@ class SubtaskPolicy:
             raise ValueError("inference requires a self-contained PI05Subtask full-state bundle")
         if manifest.get("metadata", {}).get("stage") != "stage2":
             raise ValueError("robot policy requires a stage2 bundle with trained flow actions")
+        if (native["n_action_steps"] != contract["horizon"]
+                or native["max_action_dim"] != contract["padded_action_dim"]
+                or native["vision_backbone"]["vision_config"]["image_size"] != contract["image_size"]):
+            raise ValueError("model geometry conflicts with the inference contract")
         register_training_components()
         from accelerate import init_empty_weights
         with init_empty_weights(include_buffers=False):
@@ -149,7 +161,8 @@ class SubtaskPolicy:
             raise ValueError("overall task must not be empty")
         images = self._images(payload["images"])
         masks = torch.ones(1, 3, device=device, dtype=torch.bool)
-        bins = normalize_state(state, self.state_stats).astype(np.float64)
+        bins = normalize_state(state, self.state_stats,
+                               quantile_dtype=self.quantile_dtype).astype(np.float64)
         context = self.prompts.context(overall, bins)
 
         def tensor(value):

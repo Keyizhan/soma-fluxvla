@@ -22,11 +22,11 @@ def load_state_stats(path: str, state_dim: int = 14) -> dict:
     return {'q01': low, 'q99': high}
 
 
-def normalize_state(state: np.ndarray, stats: dict) -> np.ndarray:
-    """Exact fixture convention: float32 quantile scaling, no clipping."""
+def normalize_state(state: np.ndarray, stats: dict, *, quantile_dtype=np.float32) -> np.ndarray:
+    """No clipping; legacy deployments use float32, new training uses float64 quantiles."""
     state = np.asarray(state, dtype=np.float32)
-    low = np.asarray(stats['q01'], dtype=np.float32)
-    high = np.asarray(stats['q99'], dtype=np.float32)
+    low = np.asarray(stats['q01'], dtype=quantile_dtype)
+    high = np.asarray(stats['q99'], dtype=quantile_dtype)
     if state.shape != low.shape or not np.isfinite(state).all():
         raise ValueError('state must be finite and match the training quantiles')
     span = np.where(high - low < 1e-6, 1.0, high - low)

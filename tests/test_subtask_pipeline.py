@@ -83,6 +83,8 @@ def synthetic(tmp_path):
         image_size=16,horizon=4,anchors_every=2,tokenizer=str(tmp_path/'tokenizer'),
         output=str(tmp_path/'runs'),global_batch=4,micro_batch=1,expected_gpus=1,
         stages=[dict(name='stage1',preset='stage1_fast',epochs=1,peak_lr=1e-4),dict(name='stage2',preset='hybrid',epochs=1,peak_lr=7.5e-5)])
+    from fluxvla.training.subtask.common import digest
+    cfg['tokenizer_sha256'] = {'tokenizer.json': digest(tmp_path/'tokenizer/tokenizer.json')}
     return cfg
 
 
@@ -120,7 +122,13 @@ def test_real_end_to_end_cache_and_fast(tmp_path):
     if os.environ.get('SUBTASK_SMOKE_DIR'):
         target=Path(os.environ['SUBTASK_SMOKE_DIR']);target.mkdir(parents=True,exist_ok=True)
         shutil.copytree(root,target/'cache',dirs_exist_ok=True)
-        smoke_cfg=dict(cfg,cache=str(target/'cache'),output=str(target/'runs'))
+        shutil.copytree(cfg['tokenizer'],target/'tokenizer',dirs_exist_ok=True)
+        smoke_cfg=dict(cfg,cache=str(target/'cache'),output=str(target/'runs'),
+                       tokenizer=str(target/'tokenizer'))
+        ready_path=target/'cache/READY.json'
+        ready=json.loads(ready_path.read_text())
+        ready['config']['tokenizer']=smoke_cfg['tokenizer']
+        ready_path.write_text(json.dumps(ready,indent=2))
         (target/'config.json').write_text(json.dumps(smoke_cfg))
     # Tampered cache must fail its receipt check.
     (root/'prompt_report.json').write_text('{}')
