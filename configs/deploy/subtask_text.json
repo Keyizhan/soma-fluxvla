@@ -1,0 +1,9 @@
+{
+  "prefix_source": "text",
+  "max_new_tokens": 64,
+  "num_denoise_steps": 10,
+  "use_text_cache": true,
+  "subtask_switch_confirmations": 2,
+  "subtask_update_interval_s": 0.0,
+  "subtask_switch_reset_after_s": 5.0
+}

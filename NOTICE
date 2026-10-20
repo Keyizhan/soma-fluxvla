@@ -1,0 +1,12 @@
+soma-fluxvla is a focused derivative of FluxVLA by Limx Dynamics.
+The retained training/model code originates from the sibling fluxvla-training
+snapshot. Original copyright, license and embedded upstream attribution remain
+in retained files. See LICENSE and source-manifest.json for source-file hashes.
+
+Some retained files have individual upstream origin/license notices, including
+OpenVLA-derived runner/logging code. Those notices are retained in their files.
+The project package name is soma-fluxvla; its Python import namespace remains
+fluxvla for compatibility with existing configuration and model checkpoints.
+
+SOMA changes: training-only package registration, portable Piper configuration,
+explicit predecoded cache integration, cache lifecycle validation and tooling.
