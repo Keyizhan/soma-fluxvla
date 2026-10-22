@@ -173,9 +173,12 @@ def collate(items, indices, fx, image_size, device, with_actions, n_action_steps
     return batch
 
 
-def build_model(preset, smoke, device, pretrained=None):
+def build_model(preset, smoke, device, pretrained=None, prompt_options=None):
     ns = runpy.run_path(str(REPO / 'configs/pi05_subtask_fast.py'))
     cfg = dict(ns['PRESETS'][preset]['model'])
+    if prompt_options is not None:
+        cfg['low_level_text_attention'] = 'causal' if prompt_options['all_causal'] else 'bidirectional'
+        cfg['low_level_task_independent'] = not prompt_options['low_level_sees_task']
     cfg['pretrained_name_or_path'] = None if smoke else pretrained
     if smoke:
         cfg.update(proj_width=16, n_action_steps=4)
@@ -257,15 +260,15 @@ def main():
                     help='also restore AdamW state (off by default: stage boundaries reset it)')
     ap.add_argument('--state-dim', type=int, default=14)
     ap.add_argument('--all-causal', dest='all_causal', action='store_true', default=None,
-                    help='force all-causal text (default: the transform default, Ke-Wang = True)')
+                    help='force legacy all-causal text (default: current preset full-prefix contract)')
     ap.add_argument('--no-all-causal', dest='all_causal', action='store_false',
-                    help='bidirectional conditioning prefix (paper-form deviation)')
+                    help='bidirectional conditioning prefix')
     ap.add_argument('--low-level-sees-task', dest='low_level_sees_task', action='store_true',
                     default=None,
-                    help='force Task+Subtask in the action context (default: transform default)')
+                    help='force legacy Task+Subtask action context (default: current preset subtask-only)')
     ap.add_argument('--low-level-subtask-only', dest='low_level_sees_task',
                     action='store_false',
-                    help='p(a|o,s) without the overall task (paper-form deviation)')
+                    help='p(a|o,s) without the overall task')
     ap.add_argument('--max-len', type=int, default=256)
     ap.add_argument('--seed', type=int, default=1702)
     ap.add_argument('--output', required=True)
@@ -284,15 +287,21 @@ def main():
     tokenizer = build_tokenizer_from_cfg(dict(type='PretrainedTokenizer', model_path=args.tokenizer))
     ns = runpy.run_path(str(REPO / 'configs/pi05_subtask_fast.py'))
     preset = ns['PRESETS'][args.preset]['model']
+    contract = ns['PRESETS'][args.preset]['contract']
+    prompt_options = {key: contract[key] for key in ('all_causal', 'low_level_sees_task',
+        'low_level_prompt_format', 'low_level_action_tail', 'low_level_eos', 'low_level_segmented')}
+    for key in ('all_causal', 'low_level_sees_task'):
+        if getattr(args, key) is not None:
+            prompt_options[key] = getattr(args, key)
+    if prompt_options['low_level_sees_task']:
+        prompt_options['low_level_prompt_format'] = 'legacy'
     prompts = PrepareSubtaskFastPrompts(
         tokenizer, max_len=args.max_len, state_dim=args.state_dim,
         model_vocab_size=int(preset['llm_backbone']['vocab_size']),
         fast_vocab_size=preset['fast_vocab_size'],
         fast_skip_tokens=preset['fast_skip_tokens'],
-        **{k: v for k, v in (('all_causal', args.all_causal),
-                             ('low_level_sees_task', args.low_level_sees_task))
-           if v is not None})
-    model, cfg = build_model(args.preset, args.smoke, device, args.pretrained)
+        **prompt_options)
+    model, cfg = build_model(args.preset, args.smoke, device, args.pretrained, prompt_options)
     model_for_eval = model
     train_model = model
     if world_size > 1:

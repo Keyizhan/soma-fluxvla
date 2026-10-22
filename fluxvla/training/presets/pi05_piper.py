@@ -1,5 +1,7 @@
 # Cloud shoes run: 5 epochs, global batch 64 on 8 GPUs, lr=1.6e-4.
-model = {'action_in_proj': {'in_dim': 32, 'out_dim': 1024, 'type': 'LinearProjector'},
+# MUST use true Beta time sampling; the historical power-ratio formula is invalid.
+model = {'time_sampler': 'beta', 'time_beta_alpha': 1.5, 'time_beta_beta': 1.0,
+ 'action_in_proj': {'in_dim': 32, 'out_dim': 1024, 'type': 'LinearProjector'},
  'action_out_proj': {'in_dim': 1024, 'out_dim': 32, 'type': 'LinearProjector'},
  'freeze_llm_backbone': False,
  'freeze_projector': False,

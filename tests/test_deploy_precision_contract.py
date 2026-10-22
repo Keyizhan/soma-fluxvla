@@ -13,7 +13,7 @@ def preset(name):
 
 
 def test_presets_decode_text_in_the_training_precision():
-    for name in ('stage1_fast', 'flow_only', 'hybrid', 'hybrid_insulated'):
+    for name in ('stage1_fast', 'flow_only', 'hybrid', 'hybrid_insulated', 'action_expert'):
         cfg = preset(name)
         assert cfg['text_decode_fp32'] is False, (
             f'{name}: fp32 text decoding is a different function than the bf16 training '

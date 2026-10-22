@@ -106,6 +106,16 @@ def atomic_full(model, opt, path, metadata, rng, reserve_bytes):
 
 
 def bundle_assets(cfg, model_cfg, metadata):
+    from .config import PROMPT_CONTRACT, HIGH_LEVEL_ATTENTION
+    paper = cfg.get('prompt_contract') == PROMPT_CONTRACT
+    if cfg.get('prompt_contract') not in (None, PROMPT_CONTRACT):
+        raise ValueError('unsupported deployment prompt contract')
+    if not paper and model_cfg.get('low_level_task_independent') is True:
+        raise ValueError('task-independent model requires explicit paper prompt contract')
+    if paper and model_cfg.get('low_level_text_attention') != 'bidirectional':
+        raise ValueError('paper prompt contract requires bidirectional low-level prefix')
+    if paper and model_cfg.get('low_level_task_independent') is not True:
+        raise ValueError('paper prompt contract requires task-independent low-level model')
     native = copy.deepcopy(model_cfg)
     native['pretrained_name_or_path'] = None
     native['low_level_prefix_source'] = 'text'
@@ -116,20 +126,29 @@ def bundle_assets(cfg, model_cfg, metadata):
         max_prompt_length=cfg['max_prompt_length'], fast_vocab_size=native.get('fast_vocab_size'),
         fast_skip_tokens=native.get('fast_skip_tokens'),
         attn_math=native.get('attn_math'), rope_precision=native.get('rope_precision'),
+        training_rtc=native.get('rtc_training_config'), loss_reduction=native.get('loss_reduction', 'global'),
         precision='preserve exact training state dtype; production bf16; CPU smoke fp32',
-        task_prompt='observation + overall_task + discretized state -> subtask; observation + overall_task + generated subtask -> action',
-        prompt_transform='PrepareSubtaskFastPrompts', state_bins=256, all_causal=True,
-        low_level_sees_task=True, model_vocab_size=257152,
+        task_prompt=('observation + overall_task -> subtask; observation + generated subtask -> action' if paper else
+            'observation + overall_task + discretized state -> subtask; observation + overall_task + generated subtask -> action'),
+        prompt_transform='PrepareSubtaskFastPrompts', state_bins=256, all_causal=not paper,
+        low_level_sees_task=not paper, model_vocab_size=257152,
         prompt_variant=metadata.get('contract'), image_normalization='uint8 / 255 * 2 - 1',
         camera_aliases=cfg.get('camera_aliases'),
         low_level_prefix_source='text',
-        conditioning=dict(training_action_prefix='text_bidirectional',
-            high_level_text_attention='causal', generation_is_experimental=True),
+        low_level_action_tail='' if paper or native.get('low_level_text_attention')=='causal' else '\nAction: ',
+        low_level_segmented=paper or native.get('low_level_text_attention')=='causal',
+        low_level_prompt_format='state_subtask' if paper else 'legacy',
+        low_level_eos=False,
+        conditioning=dict(training_action_prefix='text_'+native.get('low_level_text_attention', 'bidirectional'),
+            high_level_text_attention=HIGH_LEVEL_ATTENTION if paper else 'causal', generation_is_experimental=not paper),
+        action_window=samples.get('conventions', {}).get('action_window', 'legacy-next-frame-subtask-bounded'),
         action_encoding='12 joints delta to anchor; 2 grippers absolute meters',
-        normalization='train-only q01/q99; no clipping', invalid_padding='masked zero',
+        normalization='train-only q01/q99; no clipping', invalid_padding=samples.get('conventions', {}).get('invalid_padding', 'masked zero'),
         state_normalization='float64_quantiles_then_float32',
         cache_identity=metadata['cache_identity'], stage=metadata['stage'], update=metadata['update'],
         preset=metadata['preset'], smoke=metadata.get('smoke', False))
+    if paper:
+        contract['prompt_contract'] = PROMPT_CONTRACT
     return native, samples['normalization'], contract
 
 
@@ -171,7 +190,7 @@ def export_bundle(weights, destination, cfg, model_cfg, metadata, reserve_bytes=
         if p.is_file():
             with p.open('rb') as f:
                 os.fsync(f.fileno())
-            files[str(p.relative_to(partial))] = dict(size=p.stat().st_size, sha256=digest(p))
+            files[p.relative_to(partial).as_posix()] = dict(size=p.stat().st_size, sha256=digest(p))
     durable_json(partial/'DEPLOYABLE.json', dict(format='pi05-subtask-deploy-v2',
         files=files, model_spec=spec, metadata=metadata, optimizer_present=False))
     match_bundle(weights, partial, metadata)

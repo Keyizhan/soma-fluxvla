@@ -142,3 +142,104 @@ python -m compileall -q fluxvla scripts configs
 
 本地 CPU 检查用于验证依赖、注册、数据/缓存和微型模型的训练状态恢复；
 完整 PI0.5 8 卡训练仍需目标 GPU、基础权重和 Piper 数据。
+
+
+## Controlled subtask comparison (2026-10-22)
+
+New runs resolve `configs/subtask/common.json` with three small method overrides.
+`runtime.json` supplies the shared seed, data/cache/base paths and hardware/precision settings.
+A run file can extend a method file and override runtime settings; resolution happens only
+after the full inheritance chain is merged.
+The fixed `goal_text_v1_split.json` specifies 89 train / 11 validation / 15 test episodes.
+All paths are repository-working-directory relative except `extends`, which is relative
+to its configuration file. Set the common incoming path for the target Linux host.
+Historical fabric106 filenames are aliases; the data identity is dataset_goal_text_v1.
+
+```bash
+python -m fluxvla.training.subtask.comparison --configs configs/subtask/fabric106.json configs/subtask/fabric106_hybrid_insulated.json configs/subtask/fabric106_two_stage.json --check
+```
+
+Omit --check on the configured GPU host to execute. Resolved configs reject differences
+outside method/preset, output, notes and run identifier. Learning rates, epochs, runtime,
+precision and deployment settings must match. Hybrid starts directly from the official
+base and runs one joint 8-epoch phase. Hybrid_insulated and two_stage share a 4-epoch
+subtask+FAST stage1 checkpoint, then run 8 epochs of insulated joint training or
+frozen-VLM action-only training, respectively. Shared stage1 selects validation
+subtask CE at epochs 3/4 and pins actual SHA256, cache and configuration identity.
+Both staged methods reset optimizer and schedule at the transition. Comparison
+rejects differing stage1 recipes between these two methods.
+
+Hybrid has 8 total epochs; hybrid_insulated and two_stage have 12.
+Hybrid versus hybrid_insulated is not a stop-gradient-only ablation: initialization
+also differs. KI motivates the second-stage gradient design, not the necessity of
+our preliminary FAST stage. A same-stage1 joint-versus-insulated ablation is a
+separate experiment. Metadata records initialization and update budgets.
+
+| Method | Stage2 subtask / FAST / flow | VLM gradients |
+| --- | --- | --- |
+| hybrid | .15 / .15 / 1 | CE and flow |
+| hybrid_insulated | .15 / .15 / 1 | CE; flow KV detached |
+| two_stage | 0 / 0 / 1 | vision/language/projector frozen; KV detached |
+
+All methods use Task + State + Subtask through its semicolon as the low-level prefix,
+segmented tokenization, causal text and bidirectional image tokens. No low-level Action,
+EOS or FAST tokens are included. Deployment and text-reconstruction inference share that
+contract; historical bundles retain recorded legacy compatibility. High-level FAST labels
+remain available to evaluate every method. Batch 64, BF16, no EMA and no augmentation match.
+
+Rebuild old caches. Scan checks actual Parquet and trajectory hashes and rejects duplicate
+trajectories crossing fixed splits. Only train fits normalization. Test is recorded only
+in split audit metadata and never enters training caches, FAST encoding, prompt budgeting,
+batching or model selection. READY records data/labels, split and normalization identities;
+verification rescans source files. Every valid frame is sampled; next-frame windows
+cross label boundaries and repeat the final action at episode end, with repeated
+tail positions excluded from flow loss. FAST still encodes the fixed padded window.
+
+Validation computes unweighted subtask CE, FAST CE and flow MSE even when training weights
+are zero. Flow noise and Beta time use sample-ID/seed/stream/update keys. Validation uses
+a fixed independent stream and identical samples across methods; shuffle is independent.
+
+```bash
+python -m fluxvla.training.subtask.evaluate --config configs/subtask/fabric106_two_stage.json --bundle <final.deploy> --device cuda
+```
+
+This independent evaluator currently supports validation metrics only; a separate final test evaluator is not implemented. CPU tests use torch 2.5.1 and
+transformers 5.3.0; target torch 2.8 GPU/DDP and real robot rollouts remain separate checks.
+Durable checkpoint transactions require Linux statvfs and directory fsync; Windows CPU
+validation does not certify production checkpoint durability. No full training is launched.
+
+
+Validation recorded during this implementation: the latest affected configuration/cache
+regression has 20 passed; the preceding model/prefix regression has 38 passed. A wider
+53-test group also passed before the final refinements. Linux-only checkpoint transaction
+tests fail on Windows at missing os.statvfs; persistence guarantees were not weakened.
+Direct train validates cache configuration and fixed split identity; source/cache file
+hashing is performed by run verification. The recorded base SHA is configured identity;
+run preflight verifies the actual base file. No full training, production cache rebuild
+or final test-set run occurred.
+
+
+### Shared PI05 training policy alignment (2026-10-22)
+
+All three subtask methods now use the ordinary PI05 warmup/cosine schedule:
+5% warmup with floor-rounded steps, first optimizer update at LR zero, cosine
+scheduler ending at zero. Peak learning rates and method stages are unchanged.
+AdamW reuses the ordinary parameter grouping (no decay on bias or 1-D parameters).
+RTC uses the ordinary exponential delay sampler (max_delay=7 exclusive,
+temperature=1), clean prefix time zero, and masks delay positions from flow loss.
+Sample-keyed RTC draws preserve independent training and validation randomness.
+
+Training losses are local valid-element means, equally averaged over accumulation
+microbatches, then averaged by DDP. Validation separately aggregates actual valid
+numerators/counts, including RTC and episode-tail masks. Correct Beta time sampling
+is retained; it was not one of the requested alignment changes.
+
+Caches now use `next-frame-fixed-horizon-masked-tail-v3` and
+`controlled-goal-text-v2`, at `cache/goal_text_v1_pi05_aligned` by default.
+Rebuild caches and train a new recipe; old caches/checkpoints must not be relabeled.
+The shared-stage1 root also has a new aligned name. Existing output directories
+with an old run contract are rejected; use a new output directory in that case.
+
+### Required flow-time sampling
+
+Ordinary PI0.5 and all subtask recipes MUST use `time_sampler="beta"`, with default alpha=1.5 and beta=1.0. Configure `time_beta_alpha` and `time_beta_beta` in `configs/subtask/common.json` (or a method override); both must be finite and positive. These values control actual keyed training/validation draws and the saved model configuration for all three methods. Validation uses the configured law too, so validation losses across different Beta configurations are not directly comparable. The bundle evaluator enforces matching configuration; a separate common-distribution evaluation override is not provided. The corrected local FluxVLA Beta branch is shared by the models. Subtask keyed sampling uses the equivalent inverse CDF when beta=1, otherwise PyTorch Beta with isolated CPU RNG. Default draws remain unchanged. The old uniform-power ratio and `exact_beta_time=False` are rejected; missing sampler fields default to correct Beta. Existing `exact_beta_time=True` bundle fields are accepted for compatibility. New ordinary runs therefore use a different time distribution from historical buggy runs.

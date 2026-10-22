@@ -17,6 +17,7 @@ from .preprocessing import normalize_state, resize_rgb
 from .subtask_hold import SubtaskHold
 from .subtask_stability import SubtaskStability
 from .text import cut_at_action_sentinel, subtask_for_action_prompt
+from fluxvla.training.subtask.config import PROMPT_CONTRACT, HIGH_LEVEL_ATTENTION
 
 CAMERAS = ("images.cam_front", "images.cam_left_wrist", "images.cam_right_wrist")
 JOINTS = (0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12)
@@ -73,6 +74,28 @@ class SubtaskPolicy:
         self.state_stats = quantiles(statistics, "state")
         self.action_stats = quantiles(statistics, "action")
         self.contract = contract or {}
+        tag = self.contract.get('prompt_contract')
+        if tag is not None and tag != PROMPT_CONTRACT:
+            raise ValueError('unknown prompt contract')
+        independent = getattr(model, 'low_level_task_independent', False)
+        paper_prompt = getattr(prompts, 'low_level_prompt_format', 'legacy') == 'state_subtask'
+        if independent != paper_prompt or (tag == PROMPT_CONTRACT and not independent):
+            raise ValueError('model task independence conflicts with prompt format')
+        if independent and (getattr(prompts, 'low_level_sees_task', True) is not False
+                or getattr(prompts, 'low_level_action_tail', None) != ''
+                or getattr(prompts, 'low_level_eos', True) is not False
+                or getattr(prompts, 'low_level_segmented', False) is not True
+                or getattr(prompts, 'all_causal', True) is not False
+                or getattr(model, 'low_level_text_attention', None) != 'bidirectional'
+                or getattr(model, 'low_level_prefix_source', None) != 'text'):
+            raise ValueError('task-independent model requires the paper conditioning prompt')
+        # Task-free actions must be conditioned on a newly encoded low prefix.
+        # High-level generation KV encodes the overall instruction and leaks it.
+        task_free = (getattr(prompts, 'low_level_sees_task', True) is False
+                     or self.contract.get('low_level_sees_task') is False)
+        if task_free and self.config.prefix_source != 'text':
+            raise ValueError('task-free low-level conditioning forbids generation KV reuse')
+
         arithmetic = self.contract.get("state_normalization", "float32_quantiles")
         if arithmetic not in {"float32_quantiles", "float64_quantiles_then_float32"}:
             raise ValueError("unsupported state normalization arithmetic")
@@ -108,6 +131,29 @@ class SubtaskPolicy:
         cfg = config or InferenceConfig()
         validate_conditioning(contract, cfg, allow_legacy_contract=allow_legacy_contract)
         native = json.loads((root / "model_config.json").read_text())
+        tag = contract.get('prompt_contract')
+        if tag is not None and tag != PROMPT_CONTRACT:
+            raise ValueError('unknown prompt contract')
+        if (native.get('low_level_task_independent') is True
+                or contract.get('low_level_prompt_format') == 'state_subtask') and tag != PROMPT_CONTRACT:
+            raise ValueError('paper conditioning requires a recognized prompt contract')
+        if tag == PROMPT_CONTRACT:
+            expected_prompt = dict(all_causal=False, low_level_sees_task=False,
+                low_level_prompt_format='state_subtask', low_level_action_tail='',
+                low_level_eos=False, low_level_segmented=True, low_level_prefix_source='text')
+            expected_conditioning = dict(training_action_prefix='text_bidirectional',
+                high_level_text_attention=HIGH_LEVEL_ATTENTION,
+                generation_is_experimental=False)
+            if (any(contract.get(k) != v for k, v in expected_prompt.items())
+                    or any(contract.get('conditioning', {}).get(k) != v
+                           for k, v in expected_conditioning.items())
+                    or native.get('low_level_task_independent') is not True
+                    or native.get('low_level_text_attention') != 'bidirectional'
+                    or native.get('low_level_prefix_source') != 'text'):
+                raise ValueError('paper prompt contract conflicts with model or conditioning')
+        expected_attention = contract.get('conditioning', {}).get('training_action_prefix')
+        if expected_attention and expected_attention != 'text_'+native.get('low_level_text_attention', 'bidirectional'):
+            raise ValueError('model and deployment attention contracts disagree')
         if native["type"] != "PI05Subtask" or native.get("pretrained_name_or_path") is not None:
             raise ValueError("inference requires a self-contained PI05Subtask full-state bundle")
         if manifest.get("metadata", {}).get("stage") != "stage2":
@@ -129,6 +175,10 @@ class SubtaskPolicy:
             tokenizer, max_len=contract["max_prompt_length"], state_dim=14,
             model_vocab_size=native["llm_backbone"]["vocab_size"],
             fast_vocab_size=native["fast_vocab_size"], fast_skip_tokens=native["fast_skip_tokens"],
+            low_level_action_tail=contract.get('low_level_action_tail', '\nAction: '),
+            low_level_segmented=contract.get('low_level_segmented', False),
+            low_level_eos=contract.get('low_level_eos', False),
+            low_level_prompt_format=contract.get('low_level_prompt_format', 'legacy'),
             all_causal=contract["all_causal"], low_level_sees_task=contract["low_level_sees_task"])
         aliases = contract["camera_aliases"]
         policy = cls(model, prompts, json.loads((root / "normalization.json").read_text()),

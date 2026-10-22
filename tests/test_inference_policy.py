@@ -124,6 +124,142 @@ def test_bundle_rejects_corruption_and_path_escape(tmp_path):
     with pytest.raises(ValueError,match='escapes'):verify_bundle_files(tmp_path)
 
 
+@pytest.mark.parametrize('source', ['prompt', 'contract'])
+def test_task_free_policy_rejects_high_level_generation_cache(source):
+    policy, _ = setup_policy()
+    prompt = Prompt()
+    contract = {}
+    if source == 'prompt':
+        prompt.low_level_sees_task = False
+    else:
+        contract['low_level_sees_task'] = False
+    with pytest.raises(ValueError, match='forbids generation KV'):
+        SubtaskPolicy(policy.model, prompt,
+            dict(state=policy.state_stats, action=policy.action_stats),
+            config=InferenceConfig(prefix_source='generation', subtask_switch_confirmations=1),
+            contract=contract)
+
+
+def test_task_free_policy_rebuilds_identical_low_context_when_overall_task_changes():
+    from fluxvla.transforms.subtask_fast_prompts import PrepareSubtaskFastPrompts
+
+    class Tokenizer:
+        bos_token_id, eos_token_id, pad_token_id = 2, 1, 0
+        def encode(self, text, add_special_tokens=False):
+            return [3 + ord(ch) for ch in text]
+        def decode(self, ids):
+            return ''.join(chr(int(i)-3) for i in ids)
+
+    class FixedSubtaskModel(Model):
+        def generate_subtask(self, images, ids, valid, *args, **kwargs):
+            self.high_ids = ids.clone()
+            assert not kwargs['return_cache']
+            seq = torch.tensor(Tokenizer().encode('pick the cloth;'))[None]
+            return dict(token_ids=seq, lengths=torch.tensor([seq.shape[1]]), finished=[True])
+        def sample_actions_given_subtask(self, images, state, ids, valid, *args, **kwargs):
+            assert kwargs['prefix_cache'] is None
+            assert kwargs['use_cache']
+            self.low_ids = ids.clone()
+            return torch.zeros(1, 4, 32)
+
+    p, payload = setup_policy(subtask_switch_confirmations=1)
+    p.model = FixedSubtaskModel()
+    p.prompts = PrepareSubtaskFastPrompts(Tokenizer(), state_dim=14, max_len=256,
+        model_vocab_size=257152, low_level_sees_task=False,
+        low_level_prompt_format='state_subtask', low_level_action_tail='',
+        low_level_segmented=True, all_causal=False)
+    first = p.infer(payload)
+    first_high, first_low = p.model.high_ids.clone(), p.model.low_ids.clone()
+    second = p.infer(dict(payload, instruction='a different overall task'))
+    assert not torch.equal(first_high, p.model.high_ids)
+    assert torch.equal(first_low, p.model.low_ids)
+    np.testing.assert_array_equal(first['actions'], second['actions'])
+
+
+@pytest.mark.parametrize('location,key,value', [
+    ('contract','all_causal',True), ('contract','low_level_sees_task',True),
+    ('contract','low_level_prompt_format','legacy'),
+    ('contract','low_level_action_tail','Action:'), ('contract','low_level_eos',True),
+    ('native','low_level_task_independent',False),
+    ('native','low_level_text_attention','causal'),
+    ('native','low_level_prefix_source','generation'),
+])
+def test_paper_bundle_rejects_prompt_model_mismatch_before_loading_weights(
+        tmp_path, monkeypatch, location, key, value):
+    import fluxvla.inference.bundle as bundle
+    contract = dict(prompt_contract='pi05-subtask-paper-v1', state_dim=14,
+        action_dim=14, padded_action_dim=32, all_causal=False,
+        low_level_sees_task=False, low_level_prompt_format='state_subtask',
+        low_level_action_tail='', low_level_eos=False, low_level_segmented=True,
+        low_level_prefix_source='text', conditioning=dict(
+            training_action_prefix='text_bidirectional',
+            high_level_text_attention='full_prefix_causal_outputs',
+            generation_is_experimental=False))
+    native = dict(type='PI05Subtask', pretrained_name_or_path=None,
+        low_level_task_independent=True, low_level_text_attention='bidirectional',
+        low_level_prefix_source='text')
+    (contract if location == 'contract' else native)[key] = value
+    (tmp_path/'inference_contract.json').write_text(json.dumps(contract))
+    (tmp_path/'model_config.json').write_text(json.dumps(native))
+    monkeypatch.setattr(bundle, 'verify_bundle_files', lambda path: dict(metadata=dict(stage='stage2')))
+    with pytest.raises(ValueError, match='paper prompt contract'):
+        SubtaskPolicy.from_bundle(tmp_path, device='cpu')
+
+
+@pytest.mark.parametrize('tag', [None, 'pi05-subtask-paper-v999'])
+@pytest.mark.parametrize('new_marker', ['model', 'prompt'])
+def test_bundle_cannot_downgrade_paper_model_or_prompt_to_legacy(
+        tmp_path, monkeypatch, tag, new_marker):
+    import fluxvla.inference.bundle as bundle
+    contract = dict(state_dim=14, action_dim=14, padded_action_dim=32,
+        low_level_prefix_source='text', all_causal=True, low_level_sees_task=True,
+        low_level_prompt_format='state_subtask' if new_marker == 'prompt' else 'legacy',
+        conditioning=dict(training_action_prefix='text_bidirectional'))
+    if tag is not None:
+        contract['prompt_contract'] = tag
+    native = dict(type='PI05Subtask', pretrained_name_or_path=None,
+        low_level_task_independent=new_marker == 'model',
+        low_level_text_attention='bidirectional', low_level_prefix_source='text')
+    (tmp_path/'inference_contract.json').write_text(json.dumps(contract))
+    (tmp_path/'model_config.json').write_text(json.dumps(native))
+    monkeypatch.setattr(bundle, 'verify_bundle_files', lambda path: dict(metadata=dict(stage='stage2')))
+    with pytest.raises(ValueError, match='prompt contract'):
+        SubtaskPolicy.from_bundle(tmp_path, device='cpu', allow_legacy_contract=True)
+
+
+@pytest.mark.parametrize('mismatch', ['task', 'legacy_format', 'model_flag', 'causal', 'tail'])
+def test_direct_policy_rejects_model_prompt_independence_mismatch(mismatch):
+    policy, _ = setup_policy()
+    model = Model()
+    model.low_level_task_independent = mismatch != 'model_flag'
+    model.low_level_text_attention = 'bidirectional'
+    model.low_level_prefix_source = 'text'
+    prompt = Prompt()
+    prompt.low_level_prompt_format = 'legacy' if mismatch == 'legacy_format' else 'state_subtask'
+    prompt.low_level_sees_task = mismatch == 'task'
+    prompt.low_level_action_tail = 'Action:' if mismatch == 'tail' else ''
+    prompt.low_level_eos = False
+    prompt.low_level_segmented = True
+    prompt.all_causal = mismatch == 'causal'
+    with pytest.raises(ValueError, match='(conflicts with prompt|requires the paper)'):
+        SubtaskPolicy(model, prompt, dict(state=policy.state_stats, action=policy.action_stats))
+
+
+def test_direct_policy_accepts_consistent_paper_model_and_prompt():
+    policy, _ = setup_policy()
+    model = Model()
+    model.low_level_task_independent = True
+    model.low_level_text_attention = 'bidirectional'
+    model.low_level_prefix_source = 'text'
+    prompt = Prompt()
+    prompt.low_level_prompt_format = 'state_subtask'
+    prompt.low_level_sees_task = False
+    prompt.low_level_action_tail = ''
+    prompt.low_level_eos = False
+    prompt.low_level_segmented = True
+    prompt.all_causal = False
+    SubtaskPolicy(model, prompt, dict(state=policy.state_stats, action=policy.action_stats))
+
 def test_new_export_state_arithmetic_matches_training_without_clipping():
     from fluxvla.training.subtask.common import normalize
     from fluxvla.inference.preprocessing import normalize_state

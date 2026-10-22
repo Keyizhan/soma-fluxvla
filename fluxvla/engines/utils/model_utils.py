@@ -68,10 +68,29 @@ def create_sinusoidal_pos_embedding(
     return pos_emb
 
 
-def sample_beta(alpha, beta, bsize, device):
-    gamma1 = torch.rand((bsize, ), device=device).pow(1 / alpha)
-    gamma2 = torch.rand((bsize, ), device=device).pow(1 / beta)
-    return gamma1 / (gamma1 + gamma2)
+def sample_beta(alpha, beta, bsize, device, sampler='beta', generator=None):
+    """Correct Beta sampling; never use the old uniform-power ratio."""
+    if sampler != 'beta':
+        raise ValueError("time_sampler must be 'beta'; legacy_power_ratio is not a Beta distribution")
+    if not (0 < alpha < float('inf') and 0 < beta < float('inf')):
+        raise ValueError('Beta parameters must be finite and positive')
+    if generator is not None:
+        # Beta(alpha, 1) inverse CDF preserves sample-keyed RNG in subtask training.
+        if beta == 1.0:
+            return torch.rand((int(bsize),), device=device, generator=generator).pow(1 / alpha)
+        # Beta.sample has no generator argument. Subtask draws run serially on CPU
+        # within each training process; restore its global RNG after each draw.
+        if generator.device.type != 'cpu':
+            raise ValueError('general keyed Beta sampling requires a CPU generator')
+        with torch.random.fork_rng(devices=[]):
+            torch.set_rng_state(generator.get_state())
+            result = torch.distributions.Beta(float(alpha), float(beta)).sample((int(bsize),))
+            generator.set_state(torch.get_rng_state())
+        return result.to(device)
+    # Ported from the corrected local FluxVLA sampler='beta' branch.
+    alpha_t = torch.as_tensor(alpha, dtype=torch.float32, device=device)
+    beta_t = torch.as_tensor(beta, dtype=torch.float32, device=device)
+    return torch.distributions.Beta(alpha_t, beta_t).sample((int(bsize),))
 
 
 def make_att_2d_masks(pad_masks, att_masks):

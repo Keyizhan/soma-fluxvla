@@ -214,3 +214,52 @@ def test_defaults_follow_the_reference_implementation():
     assert p.all_causal is True
     assert p.low_level_sees_task is True
     assert p.variant.endswith('+allcausal')
+
+
+def test_reference_hybrid_low_prefix_matches_high_without_action_region():
+    p = prompts(low_level_action_tail='', low_level_segmented=True)
+    high = p.high_level('sort', np.zeros(4), 'pick', fast_ids())
+    low = p.low_level('pick', np.zeros(4), 'sort')
+    expected = high['input_ids'][high['valid_mask'] & ~high['action_region_mask']]
+    np.testing.assert_array_equal(expected,low['input_ids'][low['valid_mask']])
+
+
+def test_reference_expert_prefix_includes_action_delimiter_and_eos():
+    p = prompts(low_level_action_tail='\nAction: ', low_level_eos=True, low_level_segmented=True)
+    high = p.high_level('sort', np.zeros(4), 'pick', None)
+    low = p.low_level('pick', np.zeros(4), 'sort')
+    np.testing.assert_array_equal(high['input_ids'],low['input_ids'])
+
+
+@pytest.mark.parametrize('segmented', [False, True])
+def test_task_free_prefix_is_identical_for_changed_or_missing_overall_task(segmented):
+    p = prompts(low_level_sees_task=False, low_level_prompt_format='state_subtask',
+                low_level_action_tail='', low_level_eos=False,
+                low_level_segmented=segmented, all_causal=False)
+    state = np.array([.1, -.2, .3, .4])
+    variants = [p.low_level('move the arm', state, task)
+                for task in ('sort red fabric', 'discard blue fabric', None)]
+    for other in variants[1:]:
+        for key in variants[0]:
+            np.testing.assert_array_equal(variants[0][key], other[key])
+    valid = variants[0]['input_ids'][variants[0]['valid_mask']]
+    text = p.decode(valid)
+    assert text.startswith('State: ') and '; Subtask: move the arm.;' in text
+    assert 'Task:' not in text and 'Action:' not in text
+    assert p.eos_id not in valid
+    assert not np.any((valid > TOP - FAST_VOCAB) & (valid <= TOP))
+    # Overall task remains an input to the high-level planner.
+    left = p.context('sort red fabric', state)['input_ids']
+    right = p.context('discard blue fabric', state)['input_ids']
+    assert not np.array_equal(left, right)
+
+
+@pytest.mark.parametrize('bad', [dict(low_level_sees_task=True),
+                                  dict(low_level_action_tail='Action:'),
+                                  dict(low_level_eos=True)])
+def test_task_free_format_rejects_incompatible_tail_or_condition(bad):
+    config = dict(low_level_sees_task=False, low_level_prompt_format='state_subtask',
+                  low_level_action_tail='', low_level_eos=False)
+    config.update(bad)
+    with pytest.raises(ValueError, match='state_subtask requires'):
+        prompts(**config)

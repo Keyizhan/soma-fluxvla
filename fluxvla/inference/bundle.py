@@ -41,7 +41,7 @@ def validate_conditioning(contract, config, *, allow_legacy_contract=False):
         if config.prefix_source != "text":
             raise ValueError("legacy override only supports the audited text training path")
         return
-    if expected.get("training_action_prefix") != "text_bidirectional":
+    if expected.get("training_action_prefix") not in ('text_bidirectional', 'text_causal'):
         raise ValueError("unsupported training action prefix")
     if contract.get("low_level_prefix_source") != "text":
         raise ValueError("export default conflicts with its training action prefix")

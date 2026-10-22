@@ -6,7 +6,11 @@ memory-map images) and `samples.json`, in the layout `run_fast_stage1.py` expect
 
     python scripts/architecture/prepare_lerobot_fixture.py \
         --dataset <lerobot v2.1 dir> --output <fixture dir> \
-        --val-episodes 2 --anchors-every 15 --horizon 50
+        --val-episodes 2 --horizon 50
+
+Legacy architecture fixture only; production uses fluxvla.training.subtask.prepare.
+Every eligible frame is sampled (subject to the optional debug cap). This script
+retains its historical next-frame, single-subtask window convention.
 
 Conventions (match the shoes pipeline so results stay comparable):
   * state/action are quantile-normalised per dimension using q01/q99 fitted on TRAIN
@@ -85,7 +89,6 @@ def main():
     ap.add_argument('--dataset', required=True)
     ap.add_argument('--output', required=True)
     ap.add_argument('--val-episodes', default='', help='comma separated episode indices')
-    ap.add_argument('--anchors-every', type=int, default=15)
     ap.add_argument('--horizon', type=int, default=50)
     ap.add_argument('--limit-anchors', type=int, default=0, help='debug: cap anchors per episode')
     ap.add_argument('--image-source', choices=('auto', 'parquet', 'video'), default='auto',
@@ -142,12 +145,10 @@ def main():
         valid = [int(x) != 0 for x in table['subtask_valid']]
         picked = []
         for start, end, label in runs_of(subtask, valid):
-            anchor = start
-            while anchor + horizon < end:
+            for anchor in range(start, end - horizon):
                 if args.limit_anchors and len(picked) >= args.limit_anchors:
                     break
                 picked.append((anchor, label))
-                anchor += args.anchors_every
             if args.limit_anchors and len(picked) >= args.limit_anchors:
                 break
         anchors[idx] = picked
@@ -228,7 +229,7 @@ def main():
         dataset=str(root.resolve()),
         dataset_info=dict(codebase_version=info['codebase_version'], fps=info['fps'],
                           total_episodes=info['total_episodes'], total_frames=info['total_frames']),
-        val_episodes=sorted(val), anchors_every=args.anchors_every, horizon=horizon,
+        val_episodes=sorted(val), sampling="all_eligible_legacy_frames", horizon=horizon,
         arrays={k: dict(shape=list(v.shape), dtype=str(v.dtype)) for k, v in payload.items()},
         conventions=dict(delta_joint_dims=list(JOINT_DIMS), max_action_dim=MAX_ACTION_DIM,
                          image_size=IMAGE_SIZE, cameras=list(IMAGE_KEYS),

@@ -20,14 +20,21 @@ def write_json(path, value):
     tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
     tmp.replace(path)
 
-def lr_at(update, total, peak, warmup_fraction=.05, floor_ratio=.1):
+def lr_at(update, total, peak, warmup_fraction=.05, floor_ratio=0.):
+    """LR used by update N, matching ordinary PI05's post-step scheduler."""
     if not 1 <= update <= total:
         raise ValueError('update outside schedule')
-    warm = max(1, math.ceil(total * warmup_fraction))
-    if update <= warm:
-        return peak * update / warm
-    progress = (update - warm) / max(1, total - warm)
-    return peak * (floor_ratio + (1-floor_ratio) * .5 * (1 + math.cos(math.pi*progress)))
+    if floor_ratio != 0:
+        raise ValueError('ordinary PI05 cosine schedule requires zero floor')
+    if update == 1:
+        return 0.
+    step = update - 1
+    warm = int(total * warmup_fraction)
+    if step < warm:
+        return peak * step / max(1, warm)
+    progress = (step - warm) / max(1, total - warm)
+    return peak * max(0., .5 * (1 + math.cos(math.pi * progress)))
+
 
 def epoch_batches(indices, seed, epoch, global_batch, micro, world, rank):
     if global_batch % (micro * world):
@@ -40,23 +47,14 @@ def epoch_batches(indices, seed, epoch, global_batch, micro, world, rank):
         yield [batch[offset + rank*micro:offset + (rank+1)*micro]
                for offset in range(0, global_batch, block)]
 
-def runs(labels, valid):
-    start = None
-    for i, (label, ok) in enumerate(zip(labels, valid)):
-        if start is not None and (not ok or label != labels[start]):
-            yield start, i
-            start = None
-        if ok and start is None:
-            start = i
-    if start is not None:
-        yield start, len(labels)
-
-def anchors(labels, valid, stride, horizon):
-    return [(t, min(horizon, end-t-1))
-            for start, end in runs(labels, valid) for t in range(start, end, stride)]
+def anchors(valid, horizon):
+    """Use every valid observation once; labels never cut action windows."""
+    return [(t, min(horizon, len(valid)-t-1)) for t, ok in enumerate(valid) if ok]
 
 def target_window(states, actions, frame, length):
-    out = actions[frame+1:frame+1+length].copy()
+    # Ordinary PI05 starts at t+1; masks separately exclude repeated episode padding.
+    indices = np.minimum(np.arange(frame+1, frame+1+length), len(actions)-1)
+    out = actions[indices].copy()
     out[:, JOINTS] -= states[frame, JOINTS]
     return out
 
@@ -69,21 +67,16 @@ def normalize(values, st):
     lo, hi = np.array(st['q01']), np.array(st['q99'])
     return (2*(values-lo)/np.where(hi-lo < 1e-6, 1., hi-lo)-1).astype('float32')
 
-def split_groups(episodes, count, seed):
-    groups = {}
-    for i, ep in enumerate(episodes):
-        groups.setdefault(ep['trajectory_sha256'], []).append(i)
-    keys = list(groups)
-    np.random.default_rng(seed).shuffle(keys)
-    possible = {0: []}
-    for key in keys:
-        for n, selected in list(possible.items()):
-            target = n + len(groups[key])
-            if target <= count and target not in possible:
-                possible[target] = selected + groups[key]
-    if count not in possible:
-        raise ValueError('cannot split requested episode count without duplicate trajectory leakage')
-    val = set(possible[count])
-    if not val or len(val) >= len(episodes):
-        raise ValueError('empty train or validation split')
-    return val
+def validate_training_method(cfg):
+    """Keep method names and stage recipes unambiguous; accept legacy custom configs."""
+    method = cfg.get('training_method')
+    if method is None:
+        return
+    second = {'hybrid': 'hybrid', 'hybrid_insulated': 'hybrid_insulated',
+              'two_stage': 'action_expert'}
+    if method not in second:
+        raise ValueError(f'unknown training_method: {method}')
+    expected=[('stage2',second[method])]
+    if method in ('hybrid_insulated','two_stage'):expected.insert(0,('stage1','stage1_fast'))
+    if [(s['name'],s['preset']) for s in cfg['stages']]!=expected:
+        raise ValueError('training_method and stage recipes disagree')

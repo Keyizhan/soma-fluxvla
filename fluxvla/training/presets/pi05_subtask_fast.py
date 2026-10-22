@@ -3,11 +3,11 @@
 Weights mirror the reference presets (Ke-Wang1017/openpi_subtask @385d0e8):
   stage1_fast  10 / 1 / 0    VLM learns an action representation (subtask + FAST CE)
   flow_only     0 / 0 / 1    flow-matching baseline (our earlier runs)
-  hybrid     0.15 / 0.15 / 1 final recipe (subtask + FAST + flow)
+  hybrid     0.15 / 0.15 / 1 joint recipe (subtask + FAST + flow)
 `hl` = subtask CE, `fast` = FAST action-token CE, `action` = flow-matching MSE.
 
 state_dim=14 encodes only the real Piper dimensions: 32 bins cost 150 prefix tokens,
-14 bins cost 73 (see experiments/pi05_subtask_architecture/fast_stage1_20261017/REPORT.md).
+Only physical state dimensions are tokenized; action padding stays outside text.
 """
 import copy
 from pathlib import Path
@@ -23,39 +23,41 @@ STATE_DIM = 14
 
 def _model(hl, fast, action, stop_gradient=False):
     model = copy.deepcopy(_BASE)
-    model.update(type='PI05Subtask', rtc_training_config=None, ori_action_dim=14,
+    model.update(type='PI05Subtask', rtc_training_config=copy.deepcopy(_BASE['rtc_training_config']), ori_action_dim=14,
+                 loss_reduction='local',
                  hl_loss_weight=hl, fast_loss_weight=fast, action_loss_weight=action,
                  fast_vocab_size=FAST_VOCAB_SIZE, fast_skip_tokens=FAST_SKIP_TOKENS,
-                 exact_beta_time=True,
+                 # MUST inherit/use true Beta sampling for all subtask methods.
+                 time_sampler='beta', time_beta_alpha=1.5, time_beta_beta=1.0,
                  rope_precision='jax', attn_math='fp32',
-                 low_level_prefix_source='text',
+                 low_level_prefix_source='text', low_level_text_attention='bidirectional',
+                 low_level_task_independent=True,
                  stop_gradient_flow_to_prefix=stop_gradient,
                  flow_prefix_cache=True, text_use_cache=True, action_prefix_cache=True,
-                 # Must stay False: training runs under bf16 autocast, so decoding the text
-                 # branch in fp32 produces a DIFFERENT function. Measured against the
-                 # training-style forward: cache+bf16 = 1.25 logits / 0 flips,
-                 # cache+fp32 = 3.1, recompute+fp32 = 32.8 / 10 flips.
+                 # Decode in the training precision; precision changes require separate validation.
                  text_decode_fp32=False)
     return model
 
 
 def _contract(name, hl, fast, action, stop_gradient):
     return dict(
-        version='pi05-subtask-fast-v1', preset=name,
+        version='pi05-subtask-paper-v1', prompt_contract='pi05-subtask-paper-v1', preset=name,
         weights=dict(subtask=hl, fast=fast, flow=action),
         stop_gradient_flow_to_prefix=stop_gradient,
         high_condition='observation + overall_task',
-        low_condition='observation + overall_task + subtask, bidirectional flow prefix',
-        text_mask='high-level text causal; low-level flow prefix bidirectional', greedy=True,
+        low_condition='observation + subtask, bidirectional flow prefix',
+        text_mask='bidirectional conditioning prefix; causal high-level outputs', greedy=True,
         max_token_len=MAX_TOKEN_LEN, state_dim=STATE_DIM,
         fast_vocab_size=FAST_VOCAB_SIZE, fast_skip_tokens=FAST_SKIP_TOKENS,
-        rtc_enabled=False, action_dimension=14, horizon=50,
+        rtc_enabled=True, action_dimension=14, horizon=50,
         rope_precision="jax", attn_math="fp32",
-        all_causal=True, low_level_sees_task=True,
+        all_causal=False, low_level_sees_task=False,
+        low_level_prompt_format='state_subtask', low_level_action_tail='',
+        low_level_eos=False, low_level_segmented=True,
         low_level_prefix_source="text",
         conditioning=dict(training_action_prefix="text_bidirectional",
-                          high_level_text_attention="causal",
-                          generation_is_experimental=True),
+                          high_level_text_attention="full_prefix_causal_outputs",
+                          generation_is_experimental=False),
         low_level_sees_fast_tokens=False,
         fast_is_training_time_supervision_only=True,
         synthetic_identity_is_semantic_evidence=False)
@@ -75,6 +77,7 @@ collator = dict(type='DictCollator', keys=COLLATOR_KEYS,
 
 PRESETS = {
     'stage1_fast': dict(model=_model(10.0, 1.0, 0.0), contract=_contract('stage1_fast', 10.0, 1.0, 0.0, False)),
+    'action_expert': dict(model=_model(0.0, 0.0, 1.0, True), contract=_contract('action_expert', 0.0, 0.0, 1.0, True)),
     'flow_only': dict(model=_model(0.0, 0.0, 1.0), contract=_contract('flow_only', 0.0, 0.0, 1.0, False)),
     'hybrid': dict(model=_model(0.15, 0.15, 1.0), contract=_contract('hybrid', 0.15, 0.15, 1.0, False)),
     'hybrid_insulated': dict(

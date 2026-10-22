@@ -10,19 +10,24 @@ import pytest
 from PIL import Image
 
 CODE=Path(__file__).resolve().parents[1]
-from fluxvla.training.subtask.common import anchors, epoch_batches, lr_at, split_groups, target_window
+from fluxvla.training.subtask.common import anchors, epoch_batches, lr_at, target_window
 from fluxvla.training.subtask.prepare import scan, fit_stats, prepare as prepare_cache, verify
 
 
-def test_short_runs_never_cross_boundary():
-    labels=['a']*3+['b']*2+['invalid']+['c']
-    result=anchors(labels,[1,1,1,1,1,0,1],2,50)
-    assert result==[(0,2),(2,0),(3,1),(6,0)]
+def test_windows_start_at_next_frame_and_mask_episode_tail():
+    result=anchors([1,1,1,1,1,0,1],50)
+    assert result==[(0,6),(1,5),(2,4),(3,3),(4,2),(6,0)]
+    assert anchors([0]*7,50)==[]
+    assert anchors([],50)==[]
     states=np.arange(7*14,dtype='float32').reshape(7,14)
     actions=states+5
     out=target_window(states,actions,0,2)
     assert np.array_equal(out[:,0],[19,33])
     assert np.array_equal(out[:,6],actions[1:3,6])
+    tail=target_window(states,actions,6,4)
+    assert tail.shape==(4,14)
+    assert np.all(tail[:,0]==5)
+    assert np.all(tail[:,6]==actions[-1,6])
 
 
 def test_epoch_visits_once_across_ranks_and_accum():
@@ -37,20 +42,12 @@ def test_epoch_visits_once_across_ranks_and_accum():
 
 
 def test_schedule_boundaries_and_resume():
-    assert lr_at(1,100,7.5e-5)==pytest.approx(1.5e-5)
-    assert lr_at(5,100,7.5e-5)==7.5e-5
-    assert lr_at(100,100,7.5e-5)==pytest.approx(7.5e-6)
+    assert lr_at(1,100,7.5e-5)==0.
+    assert lr_at(6,100,7.5e-5)==7.5e-5
+    assert 0 < lr_at(100,100,7.5e-5) < 1e-7
     resumed=[lr_at(i,100,7.5e-5) for i in range(48,101)]
     assert resumed==[lr_at(i,100,7.5e-5) for i in range(1,101)][47:]
-    assert lr_at(1,200,7.5e-5)==pytest.approx(7.5e-6)  # fresh Stage2 warmup
-
-
-def test_grouped_split_no_leakage():
-    eps=[dict(trajectory_sha256=x) for x in ['a','a','b','c','d']]
-    val=split_groups(eps,2,1702)
-    assert len(val)==2
-    assert {eps[i]['trajectory_sha256'] for i in val}.isdisjoint({eps[i]['trajectory_sha256'] for i in range(5) if i not in val})
-    with pytest.raises(ValueError):split_groups([dict(trajectory_sha256='a')]*2,1,1)
+    assert lr_at(1,200,7.5e-5)==0.  # fresh Stage2 warmup
 
 
 def synthetic(tmp_path):
@@ -78,9 +75,12 @@ def synthetic(tmp_path):
     tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
     PreTrainedTokenizerFast(tokenizer_object=tokenizer, pad_token='<pad>', eos_token='<eos>',
                            bos_token='<bos>', unk_token='<unk>').save_pretrained(tmp_path/'tokenizer')
-    cfg=json.loads((CODE/'configs/subtask/fabric106.json').read_text())
+    from fluxvla.training.subtask.config import load_config
+    cfg=load_config(CODE/'configs/subtask/fabric106.json')
+    split=tmp_path/'split.json';split.write_text(json.dumps(dict(episodes={'0':'train','1':'validation'})))
+    cfg['split_manifest']=str(split)
     cfg.update(incoming=str(root.parent),cache=str(tmp_path/'cache'),expected_episodes=2,validation_episodes=1,
-        image_size=16,horizon=4,anchors_every=2,tokenizer=str(tmp_path/'tokenizer'),
+        image_size=16,horizon=4,tokenizer=str(tmp_path/'tokenizer'),
         output=str(tmp_path/'runs'),global_batch=4,micro_batch=1,expected_gpus=1,
         stages=[dict(name='stage1',preset='stage1_fast',epochs=1,peak_lr=1e-4),dict(name='stage2',preset='hybrid',epochs=1,peak_lr=7.5e-5)])
     from fluxvla.training.subtask.common import digest
@@ -113,10 +113,16 @@ def test_real_end_to_end_cache_and_fast(tmp_path):
     for i,n in enumerate(lengths):
         assert masks[i,:n,:14].all()
         assert not masks[i,n:].any() and not masks[i,:,:][...,14:].any()
-        assert np.all(actions[i,n:]==0)
-        assert (fast['fast_lengths'][i]==0)==(n==0)
+        if 0 < n < cfg['horizon']:
+            np.testing.assert_array_equal(actions[i,n:,:14],np.broadcast_to(actions[i,n-1,:14],actions[i,n:,:14].shape))
+        assert np.all(actions[i,:,14:]==0)
+        assert fast['fast_lengths'][i]>0
     manifest=json.loads((root/'samples.json').read_text())
-    assert manifest['split_counts']['train']==manifest['split_counts']['validation']
+    assert manifest['split_counts']==dict(train=12,validation=12)
+    assert manifest['conventions']['sampling']=='all_valid_frames'
+    assert json.loads((root/'READY.json').read_text())['sampling']=='all_valid_frames'
+    for episode in range(2):
+        assert sorted(r['frame'] for r in manifest['records'] if r['episode']==episode)==list(range(12))
     # Persist a smoke fixture outside pytest's ephemeral directory when requested.
     import os,shutil
     if os.environ.get('SUBTASK_SMOKE_DIR'):
@@ -158,16 +164,52 @@ def test_fixed_400_step_storage_plan(tmp_path,monkeypatch):
     import importlib.util
     from types import SimpleNamespace
     from fluxvla.training.subtask import run as module
-    cfg=json.loads((CODE/'configs/subtask/fabric106.json').read_text())
+    from fluxvla.training.subtask.config import load_config
+    cfg=load_config(CODE/'configs/subtask/fabric106.json')
+    split=tmp_path/'split.json';split.write_text(json.dumps(dict(episodes={'0':'train','1':'validation'})))
+    cfg['split_manifest']=str(split)
     cache=tmp_path/'cache';cache.mkdir()
     (cache/'samples.json').write_text(json.dumps(dict(records=[dict(split='train')]*10878+[dict(split='validation')]*1614)))
     cfg.update(cache=str(cache),output=str(tmp_path/'runs'))
     cfg['checkpoint']['save_every_steps']=400
-    monkeypatch.setattr(module.os,'statvfs',lambda p:SimpleNamespace(f_bavail=120,f_frsize=1024**3))
+    monkeypatch.setattr(module.shutil,'disk_usage',lambda p:SimpleNamespace(free=120*1024**3))
     plan=module.checkpoint_storage_plan(cfg)
     assert plan['optimizer_steps_per_epoch']==170
     assert plan['stage2_total_updates']==1360
     assert plan['stage2_save_steps']==[400,800,1200,1360]
     assert plan['peak_reserved_bytes']==76*1024**3
-    monkeypatch.setattr(module.os,'statvfs',lambda p:SimpleNamespace(f_bavail=75,f_frsize=1024**3))
+    monkeypatch.setattr(module.shutil,'disk_usage',lambda p:SimpleNamespace(free=75*1024**3))
     with pytest.raises(OSError,match='checkpoint peak needs'):module.checkpoint_storage_plan(cfg)
+
+
+def test_three_training_methods_are_distinct():
+    from fluxvla.training.subtask.common import validate_training_method
+    for suffix, method, preset in [('', 'hybrid','hybrid'),
+            ('_hybrid_insulated','hybrid_insulated','hybrid_insulated'),
+            ('_two_stage','two_stage','action_expert')]:
+        from fluxvla.training.subtask.config import load_config
+        cfg=load_config(CODE/f'configs/subtask/fabric106{suffix}.json')
+        validate_training_method(cfg)
+        assert cfg['training_method']==method
+        assert cfg['stages'][-1]['preset']==preset
+        cfg['stages'][-1]['preset']='wrong'
+        with pytest.raises(ValueError,match='disagree'):validate_training_method(cfg)
+
+
+def test_old_cache_is_rejected_before_reuse(tmp_path):
+    (tmp_path/'READY.json').write_text(json.dumps(dict(files={})))
+    with pytest.raises(ValueError,match='old action-window cache'):
+        verify(dict(cache=str(tmp_path)))
+
+
+@pytest.mark.parametrize('sampling', [None, 'strided', 'all_eligible_legacy_frames'])
+def test_non_dense_or_unmarked_cache_is_rejected(tmp_path, sampling):
+    from fluxvla.training.subtask.prepare import WINDOW_CONTRACT, validate_cache_contract
+    receipt=dict(window_contract=WINDOW_CONTRACT,files={})
+    if sampling is not None:
+        receipt['sampling']=sampling
+    (tmp_path/'READY.json').write_text(json.dumps(receipt))
+    with pytest.raises(ValueError,match='unsupported cache sampling'):
+        verify(dict(cache=str(tmp_path)))
+    with pytest.raises(ValueError,match='unsupported cache sampling'):
+        validate_cache_contract(receipt)

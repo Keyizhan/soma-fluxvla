@@ -162,7 +162,7 @@
       "cloud_snapshot_sha256": "d7ff57caad8a44b5062a590da1a7e8dc28cc300c896e9b6a22a8d1635a45c163"
     },
     "fluxvla/engines/utils/model_utils.py": {
-      "sha256": "c73dac51e85dbea28c54d26fd3f7b88dcef866b768822ac80ead3850c3646b6e",
+      "sha256": "98242451d346eacac5b79b91abca129432781d28135cfae31ce15ba1207328f9",
       "source_sha256": "aad04beca30cbc1a26445485968bbb08e4f3b95990f3942cd759f8f2be1031f1",
       "origin": "fluxvla-training/fluxvla/engines/utils/model_utils.py",
       "modified": true,
@@ -302,7 +302,7 @@
       "cloud_snapshot_sha256": "8b656e0bf26adccac0ffd6068c40b33c08b0dc0c053653c8cfae775fdf9ab60f"
     },
     "fluxvla/models/vlas/pi0_flowmatching.py": {
-      "sha256": "b674cf9e7150ff499386e50e56d4da2b91d1281d705111f0289bdf7d261986af",
+      "sha256": "86788fb7f1f9a34e557ec5316aba657bcd30d0f66b212dbd56ad7136e6e02b87",
       "source_sha256": "dfe5dbfc918d0514be1ad06c085e0dbb5e157a0d0870705456d4f5e91a49d1f6",
       "origin": "fluxvla-training/fluxvla/models/vlas/pi0_flowmatching.py",
       "modified": true,
@@ -449,7 +449,7 @@
     },
     "README.md": {
       "origin": "SOMA integration",
-      "sha256": "1c4561f8fbd6d5b568b1b7528c8e124940ede5fee650722c388f5e5137a364dc"
+      "sha256": "a41c777578204674f9cc3fe5f08b5e3d4079150473c0eae73ded2bb81fbb0292"
     },
     "assets/fast/SHA256SUMS": {
       "origin": "SOMA integration",
@@ -491,7 +491,7 @@
     },
     "configs/subtask/fabric106.json": {
       "origin": "SOMA integration",
-      "sha256": "8f37e919e7a2656e129ce51dac82aad822e12b02cc7d5bca6ba06c9690966a45"
+      "sha256": "f6ac238e212fa68bc4cdd06db4670f78c68f4f50e6327d77cff6dddd1ad83aa8"
     },
     "docs/plans/pi05_subtask_architecture_execution.md": {
       "origin": "SOMA integration",
@@ -523,7 +523,7 @@
     },
     "fluxvla/inference/bundle.py": {
       "origin": "SOMA integration",
-      "sha256": "0077c772add4c288bedd315637f975c08c6264139710133dd9e4e792110845ef"
+      "sha256": "e05d68cc4383c3624dc16bece37aae8f443e4a60be7183d4a1fcc3239bda6457"
     },
     "fluxvla/inference/preprocessing.py": {
       "origin": "SOMA integration",
@@ -535,7 +535,7 @@
     },
     "fluxvla/inference/subtask.py": {
       "origin": "SOMA integration",
-      "sha256": "583ef3a0f2ed733c43372aafa974ecf759a31325e6d078996edcf30da0bc3d82"
+      "sha256": "50c73864f231d0c4aaa2b91e15b83a9d2e8186148ecb8611074277c283104787"
     },
     "fluxvla/inference/subtask_hold.py": {
       "origin": "SOMA integration",
@@ -551,7 +551,7 @@
     },
     "fluxvla/models/vlas/pi05_subtask.py": {
       "origin": "SOMA integration",
-      "sha256": "a4460a37901e49e1a6cd92db014e5bab9e72985555a515983a55b740bd2ba38b",
+      "sha256": "1f78760a66d0e3c3ffc6b93135835d7a56ba839e62eab430023b03664fae709f",
       "cloud_snapshot_sha256": "3477329b1e48db9040dcb0cd4b0f4086c0675ad235f5284cf8db572c39f2b45a"
     },
     "fluxvla/models/vlas/subtask_kv.py": {
@@ -578,11 +578,11 @@
     },
     "fluxvla/training/presets/pi05_piper.py": {
       "origin": "SOMA integration",
-      "sha256": "3ec3a23da5d487798bee2932547b1a6d8ec48023d93cfff6bc496303c0f0aaf4"
+      "sha256": "cc49359f210342a9d29360e3d73842602878985a2664b79c0295b0a5f8e05945"
     },
     "fluxvla/training/presets/pi05_subtask_fast.py": {
       "origin": "SOMA integration",
-      "sha256": "78ac056cdf5fbfc73ba9ec09f65aee55dd406bb82e343f07776255d9d34134f5"
+      "sha256": "e531c0dac896978092eb25dd886f7f57f4ad0a9ad8cb3d8ffced3614cf2c747d"
     },
     "fluxvla/training/subtask/__init__.py": {
       "origin": "SOMA integration",
@@ -590,36 +590,36 @@
     },
     "fluxvla/training/subtask/checkpoints.py": {
       "origin": "SOMA integration",
-      "sha256": "8efd2f6113c0087ea30cd5fad8400183d695bf5c5bc756c07008e81f0c5a0afc",
+      "sha256": "191f58af800fb125e2ff82c6d24f84fa662ce7aad9866764332f7e9892a3d634",
       "cloud_snapshot_sha256": "27fc3bef70722eb46bfc1a718e9ab4883b67fe496cbfae3368f6559d569c4f4d"
     },
     "fluxvla/training/subtask/common.py": {
       "origin": "SOMA integration",
-      "sha256": "2f9e72530f5be775d375daff3fcb2cbb1a114349cdd1e97342a204f64f7bb280",
+      "sha256": "35f57d38f12533bac5df5cd61db078fa7d55959f9c0952c7fc89fc2c6bd54312",
       "cloud_snapshot_sha256": "2f9e72530f5be775d375daff3fcb2cbb1a114349cdd1e97342a204f64f7bb280"
     },
     "fluxvla/training/subtask/fixtures.py": {
       "origin": "SOMA integration",
-      "sha256": "00881122cdcec75c4b388a311b02244a95e68ccd16cb22788ae0ceb94f84bf07"
+      "sha256": "3629cdf9e8d05fbebd047d42ceded77124dc68c9c23aee5f8de35123f9319ea3"
     },
     "fluxvla/training/subtask/prepare.py": {
       "origin": "SOMA integration",
-      "sha256": "758ad3c1ec95c63df5626df27485090fc39ebf078ebaf718e51f94087805af02",
+      "sha256": "ab66cd9caf3b6a33a55c8996d6a3e8984051d5d84baf42a4b19c853cf71e3583",
       "cloud_snapshot_sha256": "15e1fe31dfa789d3ff0c308b75a46f56884ba2c97d72da1252bdb767998237c1"
     },
     "fluxvla/training/subtask/run.py": {
       "origin": "SOMA integration",
-      "sha256": "e2d38ee2e9842bcaf6e57899d4c1dae2b9ddebff0f7bd976765d94250d410b51",
+      "sha256": "21b8a5d7e1b4596c252bb5cdf5c22a15fc9d27f0e90627b8c2dee40148d5a2ad",
       "cloud_snapshot_sha256": "675ae682514e02afd21b7f1f98cadc4ce3ae86aaa8b7a16c7e5982e73b0d5562"
     },
     "fluxvla/training/subtask/train.py": {
       "origin": "SOMA integration",
-      "sha256": "a561c72a3018f19736425fd025c0678967348bcfb4b5fdcb1cdd191f1a32c943",
+      "sha256": "7320b78398e523f5a22da2a1ddd4d2d0c47539296c06549f8ff42ed32f3b0de5",
       "cloud_snapshot_sha256": "05f774ca6a78fec9fc7594e5818b03def66f7c6c746e40a814078c4d4b8a3fe6"
     },
     "fluxvla/transforms/subtask_fast_prompts.py": {
       "origin": "SOMA integration",
-      "sha256": "e80de6c18a21c7bc318cc2d5af10aa70687632746da9b9c5e5c02f8783c8d3e3",
+      "sha256": "e7d0de568ba4dbc89d4752bfd124f42751050ce4e0a7650660122fb96f2794de",
       "cloud_snapshot_sha256": "e80de6c18a21c7bc318cc2d5af10aa70687632746da9b9c5e5c02f8783c8d3e3"
     },
     "fluxvla/transforms/subtask_prompts.py": {
@@ -653,7 +653,7 @@
     },
     "scripts/architecture/prepare_lerobot_fixture.py": {
       "origin": "SOMA integration",
-      "sha256": "94a0ddd8962032a4136c72371ff8f194482452ef8e7ec4f4931ed15bed74150d",
+      "sha256": "7e81022e89a33b98fcfa7197dbda2cdf498aef3906cbd6b23bb225730e2980af",
       "cloud_snapshot_sha256": "94a0ddd8962032a4136c72371ff8f194482452ef8e7ec4f4931ed15bed74150d"
     },
     "scripts/architecture/prepare_shoes_subtasks.py": {
@@ -663,7 +663,7 @@
     },
     "scripts/architecture/run_fast_stage1.py": {
       "origin": "SOMA integration",
-      "sha256": "3e28ba0edd8840456c779f83e801c7d3d53b2655ace930973a2eb587ba1ca89c",
+      "sha256": "bc16d54990247550ce05195bc755ca552cd94ee84197df7453d6e4e34b894681",
       "cloud_snapshot_sha256": "e03b4d32caf20f11248f17c63db3da4b443e1eefaaabdaaf54c9582a658480a1"
     },
     "scripts/architecture/run_pi05_kv_experiment.py": {
@@ -719,7 +719,7 @@
     },
     "tests/test_deploy_precision_contract.py": {
       "origin": "SOMA integration",
-      "sha256": "3c442297a8c22845e734fbd471482235378e8cada11900db4f8a96c9044b57f9",
+      "sha256": "0de7449c098f03660e3262558f3245a38561b85dd87e7c42d74f575e146ea408",
       "cloud_snapshot_sha256": "3c442297a8c22845e734fbd471482235378e8cada11900db4f8a96c9044b57f9"
     },
     "tests/test_ema_and_loss_normalization.py": {
@@ -729,7 +729,7 @@
     },
     "tests/test_inference_policy.py": {
       "origin": "SOMA integration",
-      "sha256": "b49d1c434ac3b3e7e207fb3271f82199b52fe0c0e740f2ccb1c3b5e1f71b7779"
+      "sha256": "cbde169324d64ec39e3dc0dfd2930626f06d6dfbdc35997baa45757c9daf3b38"
     },
     "tests/test_mask_parity.py": {
       "origin": "SOMA integration",
@@ -738,7 +738,7 @@
     },
     "tests/test_pipeline_checkpoints.py": {
       "origin": "SOMA integration",
-      "sha256": "0b0dbd8e686baf1449de5acb3e2d71d668a70937efc3c10bfab5b502ff0d00fe",
+      "sha256": "f0162ef0a4ccfecd578c40983cdc213a3b9a8240f2f70db1dfa117f1493bea0d",
       "cloud_snapshot_sha256": "133c147b9ea4c850d611412d4ad46f5d579176f2a2f6ba2fc2afdc400ffe3d89"
     },
     "tests/test_pipeline_final_only_integration.py": {
@@ -768,7 +768,7 @@
     },
     "tests/test_subtask_fast.py": {
       "origin": "SOMA integration",
-      "sha256": "a03e3e5c5c30334465a7b14f0f071cdc0e78e5cc787e949c3b16a1ecb4f9f09e",
+      "sha256": "08f37ce550186a86ca54dc4e3c10fca28218ec3c58ab245a08273c95099c0590",
       "cloud_snapshot_sha256": "a03e3e5c5c30334465a7b14f0f071cdc0e78e5cc787e949c3b16a1ecb4f9f09e"
     },
     "tests/test_subtask_fast_config.py": {
@@ -778,7 +778,7 @@
     },
     "tests/test_subtask_fast_model.py": {
       "origin": "SOMA integration",
-      "sha256": "6e611a653cb6a1b416992448c6813e19dff44be72d252ce7f919557255f3bcdf",
+      "sha256": "809a8e6f0259b3aa889d1583088dae007848b5f71977a5191894d49db4768f4c",
       "cloud_snapshot_sha256": "6e611a653cb6a1b416992448c6813e19dff44be72d252ce7f919557255f3bcdf"
     },
     "tests/test_subtask_hold.py": {
@@ -787,7 +787,7 @@
     },
     "tests/test_subtask_pipeline.py": {
       "origin": "SOMA integration",
-      "sha256": "c5e14fc3cae1efe2482dce79ecbb308c186a69bb0063411ad14cc46bedff15ab",
+      "sha256": "19731d83e1fa0bd8321540fb354d4b77029d1b118ea3aa15b2819b525b8f924f",
       "cloud_snapshot_sha256": "31ab1ffd3bd153511f1613681728f8a211b4df805623b576c3c69a413565f0b0"
     },
     "tests/test_subtask_stability.py": {
@@ -827,9 +827,65 @@
     "docs/research/pi05_small_data_plan.md": {
       "origin": "SOMA integration / small-data architecture research",
       "sha256": "cb408b21ce0aacdeea48f5a2a985d15c281c351444f1951fc09c43e7957b97a2"
+    },
+    "configs/subtask/common.json": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "d1aa96e23732c1009b917f24a4dd8bd11c7f501f85a53b08e406351b8b5f0cb8"
+    },
+    "configs/subtask/fabric106_hybrid_insulated.json": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "3968176c42e67149e1071e4eb079f39399983ccfa40c3d79c2c152fa19e798d3"
+    },
+    "configs/subtask/fabric106_two_stage.json": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "77877e331fd700f0d4165fe615ec020c8d6983d1f48fda4f30bd1fa891d95c33"
+    },
+    "configs/subtask/goal_text_v1_split.json": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "7a829ecf54d06aad8a8ed9084d4c67dc01f139e7caa5ce037613eacb73fbee9f"
+    },
+    "configs/subtask/runtime.json": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "171608502cda75d9c63b19f0cab85639a099202bf9ba63be220f1e747c86d3ac"
+    },
+    "fluxvla/training/subtask/comparison.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "740a54fed3e3733b6d7a760cccc204c224a6a7ca8da748227970e146aca2281c"
+    },
+    "fluxvla/training/subtask/config.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "27d1ec2c8851b8f9b550b9c7cf966b2ee3cf812eb4838c74dfc26ea0552e7617"
+    },
+    "fluxvla/training/subtask/evaluate.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "ca4fd7bb2fb4933e39f1978db9efded1b15454820f10fe0948b46e397f9440af"
+    },
+    "fluxvla/training/subtask/randomness.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "7688f13d0c290be9061da8c59a9494ac91aaa5ccbeccd8df4ec8826dd85bb36d"
+    },
+    "tests/test_controlled_comparison.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "349931e21b59109007cc5978810876926b9b96c0875700dc69fe49b523dda5c5"
+    },
+    "tests/test_paper_contract_acceptance.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "afab7b278079a308d13805181d2d2e0264e0746b49626823da6e96fb8b293026"
+    },
+    "tests/test_pi05_common_alignment.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "db1720025fbf84606be260543890a3a4a71adb72bf82ddd978e746c70defcda9"
+    },
+    "tests/test_pi05_time_sampling.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "b0d58c1e3a682dd2d58b4a2935bd0f9a05f759eccc2243a5b8dc8bd230d2b9ce"
+    },
+    "tests/test_subtask_full_prefix.py": {
+      "origin": "SOMA integration / controlled PI05 subtask training",
+      "sha256": "966bb3b940a456f0eb9fde330fd716bc917d1077a0f75e6b82f6d5d9e0e4053f"
     }
   },
-  "integration_date": "2026-10-20",
+  "integration_date": "2026-10-22",
   "cloud_source": "subtask130_20261019/code, training run runs_ae8_20261020",
   "cloud_archive_sha256": "8571f08e8f246450cfa5e209ecdd810f8a9685027d36ee08b43307d104a99051"
 }

@@ -5,8 +5,7 @@ Mirrors the reference implementation
 (``src/openpi/models/tokenizer.py::PaligemmaTokenizer.tokenize_high_low_prompt``).
 
 Deliberate departures from the reference (documented, tested):
-  * The conditioning prefix stays bidirectional; only target regions are causal.
-    The reference makes the whole sequence causal.
+  * Text defaults to causal attention, matching the reference.
   * Overflow is a hard error with a diagnostic breakdown instead of a silent
     truncation that would cut FAST tokens and the ``|`` / EOS sentinel.
 
@@ -49,7 +48,17 @@ class PrepareSubtaskFastPrompts:
 
     def __init__(self, tokenizer, max_len=256, state_dim=32, state_bins=256,
                  model_vocab_size=None, fast_vocab_size=2048, fast_skip_tokens=128,
-                 low_level_sees_task=True, all_causal=True):
+                 low_level_sees_task=True, all_causal=True, low_level_action_tail='\nAction: ', low_level_eos=False,
+                 low_level_segmented=False, low_level_prompt_format="legacy"):
+        if low_level_prompt_format not in ('legacy', 'state_subtask'):
+            raise ValueError('unsupported low_level_prompt_format')
+        if low_level_prompt_format == 'state_subtask' and (
+                low_level_sees_task or low_level_action_tail or low_level_eos):
+            raise ValueError('state_subtask requires no overall task, Action tail, or EOS')
+        self.low_level_prompt_format = low_level_prompt_format
+        self.low_level_segmented = low_level_segmented
+        self.low_level_eos = low_level_eos
+        self.low_level_action_tail = low_level_action_tail
         self.tokenizer = (build_tokenizer_from_cfg(tokenizer)
                           if isinstance(tokenizer, dict) else tokenizer)
         self.max_len = int(max_len)
@@ -59,7 +68,7 @@ class PrepareSubtaskFastPrompts:
         self.fast_vocab_size = int(fast_vocab_size)
         self.fast_skip_tokens = int(fast_skip_tokens)
         # T3.4 switch: the reference implementation lets the action context see the
-        # overall task; p(a|o,s) does not. Default follows the paper formula.
+        # overall task; p(a|o,s) does not. The training default follows the reference.
         self.low_level_sees_task = bool(low_level_sees_task)
         # Defaults follow the Ke-Wang reference (all-causal text, action context sees the
         # overall task). Set these False to get the paper-form deviations:
@@ -67,6 +76,8 @@ class PrepareSubtaskFastPrompts:
         #   low_level_sees_task=False   -> p(a|o,s) without the overall task
         self.all_causal = bool(all_causal)
         self.variant = self.version + ('+allcausal' if self.all_causal else '')
+        if self.low_level_prompt_format == 'state_subtask':
+            self.variant += '+state-subtask'
         self.pad_id = self.tokenizer.pad_token_id
         self.bos_id = self.tokenizer.bos_token_id
         self.eos_id = self.tokenizer.eos_token_id
@@ -241,15 +252,31 @@ class PrepareSubtaskFastPrompts:
 
     def low_level(self, subtask, states, overall_task=None):
         """Conditioning-only prefix for the action expert (no supervised tokens)."""
-        if self.low_level_sees_task:
+        if self.low_level_prompt_format == 'state_subtask':
+            # A separate context is required: generated high-level KV still contains
+            # the overall task even when the visible low-level text omits it.
+            condition = f'State: {self.state_text(states)}; Subtask: '
+            answer = clean_reference(subtask) + ';'
+            text = condition + answer
+        elif self.low_level_sees_task:
             if overall_task is None:
                 raise ValueError('low_level_sees_task=True requires overall_task')
             text = (f'Task: {clean_reference(overall_task)}; '
                     f'State: {self.state_text(states)}; '
-                    f'Subtask: {clean_reference(subtask)};\nAction: ')
+                    f'Subtask: {clean_reference(subtask)};' + self.low_level_action_tail)
         else:
             text = f'Task: {clean_reference(subtask)}; State: {self.state_text(states)};\nAction: '
         ids = [self.bos_id] + self._encode(text)
+        if self.low_level_segmented and self.low_level_prompt_format == 'state_subtask':
+            ids = [self.bos_id] + self._encode(condition) + self._encode(answer)
+        elif self.low_level_segmented and self.low_level_sees_task:
+            condition = (f'Task: {clean_reference(overall_task)}; '
+                         f'State: {self.state_text(states)}; Subtask: ')
+            ids = ([self.bos_id] + self._encode(condition)
+                   + self._encode(clean_reference(subtask) + ';')
+                   + (self._encode(self.low_level_action_tail) if self.low_level_action_tail else []))
+        if self.low_level_eos:
+            ids.append(self.eos_id)
         if len(ids) > self.max_len:
             raise ValueError(f'Low-level prompt needs {len(ids)} tokens > max_len={self.max_len}')
         pad = self.max_len - len(ids)

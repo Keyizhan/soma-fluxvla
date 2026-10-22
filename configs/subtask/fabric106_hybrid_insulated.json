@@ -1,0 +1,5 @@
+{
+  "extends": "common.json",
+  "training_method": "hybrid_insulated",
+  "output": "work_dirs/goal_text_v1_paper_prefix_hybrid_insulated/seed-{seed}"
+}

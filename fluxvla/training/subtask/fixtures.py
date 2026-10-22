@@ -128,11 +128,12 @@ def collate(items, indices, fx, image_size, device, with_actions, n_action_steps
     return batch
 
 def build_model(preset, smoke, device, pretrained=None, dtype=torch.float32,
-                attn_math='bf16'):
+                attn_math='bf16', time_sampler='beta', time_beta_alpha=1.5, time_beta_beta=1.0):
     from fluxvla.training.presets.pi05_subtask_fast import PRESETS
     cfg = copy.deepcopy(PRESETS[preset]['model'])
     cfg['pretrained_name_or_path'] = None if smoke else pretrained
     cfg['attn_math'] = attn_math
+    cfg.update(time_sampler=time_sampler, time_beta_alpha=time_beta_alpha, time_beta_beta=time_beta_beta)
     if smoke:
         cfg.update(proj_width=16, n_action_steps=4)
         for key in ('llm_backbone', 'llm_expert'):

@@ -133,6 +133,8 @@ def test_native_pi05_bundle_builds_without_original_weights(fixture):
     from fluxvla.engines import build_vla_from_cfg
     import runpy
     native=runpy.run_path(str(Path(__file__).parents[1]/'configs/pi05_subtask_fast.py'))['model']
+    from fluxvla.training.subtask.config import PROMPT_CONTRACT
+    cfg['prompt_contract']=PROMPT_CONTRACT
     native.update(pretrained_name_or_path=None,proj_width=16,n_action_steps=4,fast_vocab_size=8,fast_skip_tokens=2)
     for key in ('llm_backbone','llm_expert'):
         native[key].update(hidden_size=16,intermediate_size=32,num_hidden_layers=2,
@@ -157,3 +159,54 @@ def test_native_pi05_bundle_builds_without_original_weights(fixture):
     hidden=torch.randn(2,4,16,dtype=torch.bfloat16)
     assert torch.equal(model.project_text(hidden),restored.project_text(hidden))
     assert torch.equal(model.action_out_proj(hidden),restored.action_out_proj(hidden))
+
+
+@pytest.mark.parametrize('preset',['hybrid','hybrid_insulated','action_expert'])
+def test_new_prefix_contract_roundtrip(fixture,preset):
+    from fluxvla.training.subtask.config import PROMPT_CONTRACT
+    _,_,_,cfg,native,meta,_=fixture
+    cfg['prompt_contract']=PROMPT_CONTRACT
+    native['low_level_text_attention']='bidirectional'
+    native['low_level_task_independent']=True
+    native['rtc_training_config']=dict(enabled=True,max_delay=7,distribution='exponential',temperature=1.)
+    native['loss_reduction']='local'
+    meta['preset']=preset
+    saved,_,contract=cp.bundle_assets(cfg,native,meta)
+    assert saved['low_level_text_attention']=='bidirectional'
+    assert saved['low_level_task_independent'] is True
+    assert contract['prompt_contract']==PROMPT_CONTRACT
+    assert contract['conditioning']['training_action_prefix']=='text_bidirectional'
+    assert contract['conditioning']['high_level_text_attention']=='full_prefix_causal_outputs'
+    assert contract['conditioning']['generation_is_experimental'] is False
+    assert contract['low_level_action_tail']==''
+    assert contract['low_level_eos'] is False
+    assert contract['low_level_segmented'] is True
+    assert contract['low_level_sees_task'] is False
+    assert contract['all_causal'] is False
+    assert contract['low_level_prompt_format']=='state_subtask'
+    assert contract['training_rtc']==native['rtc_training_config']
+    assert contract['loss_reduction']=='local'
+
+
+def test_paper_export_rejects_model_contract_mismatch(fixture):
+    from fluxvla.training.subtask.config import PROMPT_CONTRACT
+    _,_,_,cfg,native,meta,_=fixture
+    cfg['prompt_contract']=PROMPT_CONTRACT
+    native.update(low_level_text_attention='causal',low_level_task_independent=True)
+    with pytest.raises(ValueError,match='bidirectional'):cp.bundle_assets(cfg,native,meta)
+    native.update(low_level_text_attention='bidirectional',low_level_task_independent=False)
+    with pytest.raises(ValueError,match='task-independent'):cp.bundle_assets(cfg,native,meta)
+    native['low_level_task_independent']=True
+    cfg.pop('prompt_contract')
+    with pytest.raises(ValueError,match='explicit paper'):cp.bundle_assets(cfg,native,meta)
+
+
+def test_legacy_bundle_assets_keep_original_prompt_semantics(fixture):
+    _,_,_,cfg,native,meta,_=fixture
+    native['low_level_text_attention']='bidirectional'
+    _,_,contract=cp.bundle_assets(cfg,native,meta)
+    assert 'prompt_contract' not in contract
+    assert contract['low_level_prompt_format']=='legacy'
+    assert contract['low_level_sees_task'] is True
+    assert contract['all_causal'] is True
+    assert contract['low_level_action_tail']=='\nAction: '

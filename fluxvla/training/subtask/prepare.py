@@ -1,14 +1,17 @@
-"""Streaming LeRobot v2.1 -> real .npy mmap cache, delta stats and variable-length FAST."""
+"""Streaming LeRobot v2.1 -> real .npy mmap cache, delta stats and fixed-horizon FAST."""
+from .config import load_config, canonical_prompts, PROMPT_CONTRACT, CACHE_VERSION
 import argparse
 import io
 import json
 import shutil
-import sys
 from pathlib import Path
 import numpy as np
 import pyarrow.parquet as pq
 from PIL import Image
-from .common import anchors, digest, normalize, split_groups, stats, target_window, write_json
+WINDOW_CONTRACT = 'next-frame-fixed-horizon-masked-tail-v3'
+SAMPLING_CONTRACT = 'all_valid_frames'
+
+from .common import anchors, digest, normalize, stats, target_window, write_json
 
 
 def choose(names, aliases):
@@ -67,7 +70,7 @@ def scan(cfg):
             overall = table['overall_task']
             if any(not isinstance(t,str) or not t.strip() for t in overall) or len(set(overall)) != 1:
                 raise ValueError(f'{path}: require one nonempty overall_task')
-            picked = anchors(labels, valid, cfg['anchors_every'], cfg['horizon'])
+            picked = anchors(valid, cfg['horizon'])
             if not picked:
                 raise ValueError(f'{path}: no valid annotated anchors')
             # Fingerprint trajectories, ignoring labels and root to catch duplicate exports.
@@ -94,9 +97,17 @@ def scan(cfg):
             raise ValueError(f'{root}: metadata frame count does not match actual frames')
     if len(episodes) != cfg['expected_episodes']:
         raise ValueError(f'waiting for complete data: expected {cfg["expected_episodes"]} episodes, found {len(episodes)}')
-    val = split_groups(episodes, cfg['validation_episodes'], cfg['seed'])
-    for i, ep in enumerate(episodes):
-        ep['split'] = 'validation' if i in val else 'train'
+    manifest=json.loads(Path(cfg['split_manifest']).read_text())
+    assignments={int(k):v for k,v in manifest['episodes'].items()}
+    if set(assignments)!={ep['episode'] for ep in episodes}:
+        raise ValueError('split manifest must cover every episode exactly once')
+    groups={}
+    for ep in episodes:
+        ep['split']=assignments[ep['episode']]
+        if ep['split'] not in ('train','validation','test'):raise ValueError('invalid split')
+        groups.setdefault(ep['trajectory_sha256'],set()).add(ep['split'])
+    if any(len(v)>1 for v in groups.values()):
+        raise ValueError('duplicate trajectory crosses fixed episode splits')
     return episodes
 
 
@@ -123,6 +134,7 @@ def fit_stats(episodes, temp):
     result = dict(state=stats(maps[0]), action=stats(maps[1]), state_rows=counts[0], valid_action_rows=counts[1])
     for m in maps:
         m.flush()
+        m._mmap.close()
     del maps
     for p in paths:
         p.unlink()
@@ -163,7 +175,8 @@ def cache_camera(ep, source, target, indices, camera, size):
 
 def encode_fast(root, cfg, processor):
     actions = np.load(root/'arrays/actions.npy', mmap_mode='r')
-    lengths = np.load(root/'arrays/valid_lengths.npy', mmap_mode='r')
+    # FAST retains the complete padded window; flow masks alone exclude the tail.
+    lengths = np.full(len(actions), cfg['horizon'], dtype='int32')
     result = [[] for _ in lengths]
     squared, absolute, count, worst = 0.,0.,0,0.
     for length in sorted(set(lengths.tolist())):
@@ -204,10 +217,13 @@ def cache_camera_job(args):
 
 
 def prepare(cfg, code_root, processor=None):
+    if cfg.get('version') != CACHE_VERSION or cfg.get('prompt_contract') != PROMPT_CONTRACT:
+        raise ValueError('cache preparation requires the paper prompt contract and cache version')
     output = Path(cfg['cache'])
     if output.exists():
         raise FileExistsError(f'{output} already exists; use verify or a new cache path')
-    episodes = scan(cfg)
+    all_episodes = scan(cfg)
+    episodes = [ep for ep in all_episodes if ep['split'] != 'test']
     n = sum(len(ep['anchors']) for ep in episodes)
     size,h = cfg['image_size'],cfg['horizon']
     estimate = n*(9*size*size+4*h*32+h*32+14*4)+sum(ep['n'] for ep in episodes)*14*4
@@ -218,6 +234,7 @@ def prepare(cfg, code_root, processor=None):
     if temp.exists():
         raise FileExistsError(f'incomplete prior cache: {temp}; inspect/remove explicitly before retry')
     (temp/'arrays').mkdir(parents=True)
+    write_json(temp/'split_manifest.json',dict(episodes=all_episodes,source_sha256=digest(cfg['split_manifest'])))
     normalization = fit_stats(episodes,temp)
     specifications = dict(images=((n,9,size,size),'uint8'), states=((n,14),'float32'),
         actions=((n,h,32),'float32'),action_masks=((n,h,32),'bool'),img_masks=((n,3),'bool'),valid_lengths=((n,),'int32'))
@@ -243,10 +260,9 @@ def prepare(cfg, code_root, processor=None):
             arrays['states'][i] = normalize(state[frame],normalization['state'])
             arrays['actions'][i] = 0
             arrays['action_masks'][i] = False
-            if length:
-                window = target_window(state,action,frame,length)
-                arrays['actions'][i,:length,:14] = normalize(window,normalization['action'])
-                arrays['action_masks'][i,:length,:14] = True
+            window = target_window(state,action,frame,h)
+            arrays['actions'][i,:,:14] = normalize(window,normalization['action'])
+            arrays['action_masks'][i,:length,:14] = True
             arrays['img_masks'][i] = True
             arrays['valid_lengths'][i] = length
             records.append(dict(sample_id=f'{len(records):08d}',source=ep['root'],episode=ep['episode'],frame=frame,
@@ -261,10 +277,11 @@ def prepare(cfg, code_root, processor=None):
             pool.shutdown(wait=True,cancel_futures=True)
     for a in arrays.values():
         a.flush()
+        a._mmap.close()
     del arrays
     write_json(temp/'samples.json',dict(records=records,episodes=episodes,normalization=normalization,
-        conventions=dict(joint_delta_dims=[0,1,2,3,4,5,7,8,9,10,11,12],grippers='absolute meters',
-            horizon=h,stride=cfg['anchors_every'],invalid_padding='masked zero',normalization='train valid delta windows q01/q99'),
+        conventions=dict(action_window=WINDOW_CONTRACT,joint_delta_dims=[0,1,2,3,4,5,7,8,9,10,11,12],grippers='absolute meters',
+            horizon=h,sampling=SAMPLING_CONTRACT,invalid_padding='repeat last action, masked from flow loss',normalization='train valid delta windows q01/q99'),
         split_counts={s:sum(r['split']==s for r in records) for s in ('train','validation')}))
     if processor is None:
         # Explicit local BPE construction is compatible with transformers 5.3;
@@ -282,37 +299,57 @@ def prepare(cfg, code_root, processor=None):
     # Check the complete text+FAST length before producing READY (no silent truncation).
     from .fixtures import Fixtures, prepare as pack
     from fluxvla.engines import build_tokenizer_from_cfg
-    from fluxvla.transforms.subtask_fast_prompts import PrepareSubtaskFastPrompts
     tok = build_tokenizer_from_cfg(dict(type='PretrainedTokenizer',model_path=cfg['tokenizer']))
-    prompts = PrepareSubtaskFastPrompts(tok,state_dim=14,max_len=cfg['max_prompt_length'],model_vocab_size=257152)
+    prompts = canonical_prompts(tok,cfg)
     packed = pack(Fixtures(temp),prompts,14)
     write_json(temp/'prompt_report.json',dict(max_tokens=max(int(p['high']['valid_mask'].sum()) for p in packed),samples=n))
     del packed
     files = {str(p.relative_to(temp)):dict(size=p.stat().st_size,sha256=digest(p)) for p in sorted(temp.rglob('*')) if p.is_file()}
-    write_json(temp/'READY.json',dict(version=cfg['version'],config=cfg,files=files,samples=n,
-        train_episodes=len(episodes)-cfg['validation_episodes'],validation_episodes=cfg['validation_episodes']))
+    write_json(temp/'READY.json',dict(prompt_contract=PROMPT_CONTRACT,window_contract=WINDOW_CONTRACT,sampling=SAMPLING_CONTRACT,version=cfg['version'],config=cfg,files=files,samples=n,
+        data_identity=[dict(episode=e['episode'],split=e['split'],parquet_sha256=e['parquet_sha256'],trajectory_sha256=e['trajectory_sha256']) for e in all_episodes],split_manifest_sha256=digest(cfg['split_manifest']),normalization=normalization,train_episodes=sum(e['split']=='train' for e in episodes),validation_episodes=sum(e['split']=='validation' for e in episodes)))
     temp.rename(output)
     return output
+
+
+def validate_cache_contract(ready):
+    if ready.get('window_contract') != WINDOW_CONTRACT:
+        raise ValueError('old action-window cache; rebuild in a new cache directory')
+    if ready.get('sampling') != SAMPLING_CONTRACT:
+        raise ValueError('unsupported cache sampling; rebuild with all_valid_frames in a new cache directory')
+    if ready.get('version') != CACHE_VERSION or ready.get('prompt_contract') != PROMPT_CONTRACT:
+        raise ValueError('cache predates paper prompt/attention contract; rebuild cache')
+
+
+def validate_cache_config(ready,cfg):
+    validate_cache_contract(ready)
+    # Fixed episode manifests make this cache independent of the training seed.
+    for key in ('version','prompt_contract','expected_episodes','validation_episodes','horizon','image_size','max_prompt_length','max_fast_tokens','camera_aliases','tokenizer','split_manifest'):
+        if cfg[key]!=ready['config'][key]:
+            raise ValueError(f'cache config changed: {key}')
+    if ready.get('split_manifest_sha256')!=digest(cfg['split_manifest']):
+        raise ValueError('fixed split manifest changed')
 
 
 def verify(cfg):
     root=Path(cfg['cache'])
     ready=json.loads((root/'READY.json').read_text())
+    validate_cache_contract(ready)
     for name,meta in ready['files'].items():
         p=root/name
         if not p.is_file() or p.stat().st_size!=meta['size'] or digest(p)!=meta['sha256']:
             raise ValueError(f'cache verification failed: {p}')
-    # Config fields that affect data must still match.
-    for key in ('version','seed','expected_episodes','validation_episodes','anchors_every','horizon','image_size','max_prompt_length','max_fast_tokens','camera_aliases','tokenizer'):
-        if cfg[key]!=ready['config'][key]:
-            raise ValueError(f'cache config changed: {key}')
+    validate_cache_config(ready,cfg)
+    current=scan(cfg)
+    actual=[dict(episode=e['episode'],split=e['split'],parquet_sha256=e['parquet_sha256'],trajectory_sha256=e['trajectory_sha256']) for e in current]
+    if ready.get('data_identity')!=actual or ready.get('split_manifest_sha256')!=digest(cfg['split_manifest']):
+        raise ValueError('dataset or fixed split identity changed; rebuild cache')
     print(json.dumps(dict(status='CACHE_VERIFIED',samples=ready['samples'])),flush=True)
 
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--config',required=True)
     p.add_argument('command',choices=['scan','prepare','verify']);a=p.parse_args()
-    cfg=json.loads(Path(a.config).read_text())
+    cfg=load_config(a.config)
     if a.command=='scan':
         eps=scan(cfg);print(json.dumps(dict(episodes=len(eps),anchors=sum(len(e['anchors']) for e in eps))))
     elif a.command=='prepare': prepare(cfg,Path(__file__).resolve().parents[3])

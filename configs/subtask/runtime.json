@@ -1,0 +1,13 @@
+{
+  "seed": 1702,
+  "incoming": "D:/pi05_subtask/ours/dataset_goal_text_v1",
+  "cache": "cache/goal_text_v1_paper_prefix",
+  "shared_stage1_root": "work_dirs/shared_goal_text_v1_paper_prefix",
+  "pretrained": "checkpoints/pi05_base",
+  "tokenizer": "checkpoints/pi05_base",
+  "dtype": "bf16",
+  "attn_math": "bf16",
+  "micro_batch": 4,
+  "expected_gpus": 8,
+  "cache_workers": 4
+}

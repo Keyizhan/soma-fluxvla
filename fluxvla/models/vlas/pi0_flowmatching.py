@@ -107,6 +107,9 @@ class PI0FlowMatching(BaseVLA):
                  max_action_dim: int = 7,
                  ori_action_dim: int = None,
                  num_steps: int = 10,
+                 time_sampler: str = 'beta',
+                 time_beta_alpha: float = 1.5,
+                 time_beta_beta: float = 1.0,
                  rtc_training_config: Optional[Dict] = None,
                  **kwargs):
         super(PI0FlowMatching, self).__init__(
@@ -167,6 +170,14 @@ class PI0FlowMatching(BaseVLA):
         self.max_action_dim = max_action_dim
         self.ori_action_dim = ori_action_dim
         self.num_steps = num_steps
+        # MUST use the correct Beta sampler, including when a config omits this field.
+        if time_sampler != 'beta':
+            raise ValueError("time_sampler must be 'beta'")
+        if not (0 < time_beta_alpha < float('inf') and 0 < time_beta_beta < float('inf')):
+            raise ValueError('time Beta parameters must be finite and positive')
+        self.time_sampler = time_sampler
+        self.time_beta_alpha = float(time_beta_alpha)
+        self.time_beta_beta = float(time_beta_beta)
         self.rtc_training_config = rtc_training_config
 
     def to_bfloat16(self):
@@ -186,7 +197,7 @@ class PI0FlowMatching(BaseVLA):
         return noise
 
     def sample_time(self, bsize, device):
-        time_beta = sample_beta(1.5, 1.0, bsize, device)
+        time_beta = sample_beta(self.time_beta_alpha, self.time_beta_beta, bsize, device, sampler=self.time_sampler)
         time = time_beta * 0.999 + 0.001
         return time.to(dtype=torch.float32, device=device)
 

@@ -206,10 +206,6 @@ def test_time_sampling_is_a_real_beta(model):
     assert abs(samples.mean().item() - 0.6) < 0.01
     assert samples.min() >= 0.001 and samples.max() <= 1.0
     assert abs(samples.std().item() - 0.2619) < 0.01   # sd = sqrt(1.5/(2.5^2*3.5))
-    model.exact_beta_time = False
-    legacy = model.sample_time(40000, torch.device('cpu'))
-    assert abs(legacy.mean().item() - samples.mean().item()) > 0.01 or \
-        abs(legacy.std().item() - samples.std().item()) > 0.01
 
 
 def test_generation_accepts_an_explicit_ar_mask(model):
@@ -231,3 +227,65 @@ def test_generation_accepts_an_explicit_ar_mask(model):
 def test_invalid_fast_vocabulary_is_rejected():
     with pytest.raises(ValueError, match='FAST vocabulary does not fit'):
         build_vla_from_cfg(tiny_config(fast_vocab_size=4096, fast_skip_tokens=4))
+
+
+def test_reference_low_prefix_is_causal_and_cache_matches_uncached():
+    from fluxvla.engines.utils.model_utils import make_att_2d_masks
+    m = build_vla_from_cfg(tiny_config(low_level_text_attention='causal')).eval()
+    images, image_masks = image_batch(batch=1)
+    ids = torch.tensor([[2,3,4,5]])
+    valid = torch.ones_like(ids, dtype=torch.bool)
+    _, full_valid, ar = m.embed_prefix(images, ids, image_masks, valid)
+    mask = make_att_2d_masks(full_valid, ar)
+    offset = full_valid.shape[1]-ids.shape[1]
+    assert not mask[0, offset, offset+1]
+    assert mask[0, offset+1, offset]
+    assert not mask[0, 0, offset]
+    states = torch.zeros(1,32)
+    actions = torch.randn(1,4,32)
+    noise = torch.randn_like(actions)
+    time = torch.tensor([.4])
+    a = m.forward_low_level(images,states,ids,valid,actions,image_masks,
+                           noise=noise,time=time,use_prefix_cache=True)
+    b = m.forward_low_level(images,states,ids,valid,actions,image_masks,
+                           noise=noise,time=time,use_prefix_cache=False)
+    torch.testing.assert_close(a['predictions'], b['predictions'], rtol=2e-4,atol=2e-4)
+
+
+@pytest.mark.parametrize('preset,insulated,text_trainable',[
+    ('hybrid',False,True),('hybrid_insulated',True,True),('action_expert',True,False)])
+def test_recipe_gradient_paths(preset, insulated, text_trainable):
+    from fluxvla.training.subtask.train import configure_trainable_parameters
+    m=build_vla_from_cfg(tiny_config(stop_gradient_flow_to_prefix=insulated,
+        low_level_text_attention='causal')).eval()
+    configure_trainable_parameters(m,preset)
+    assert m.llm_backbone.embed_tokens.weight.requires_grad == text_trainable
+    images, masks=image_batch(batch=1)
+    ids=torch.tensor([[2,3,4]])
+    valid=torch.ones_like(ids,dtype=torch.bool)
+    result=m.forward_low_level(images,torch.zeros(1,32),ids,valid,torch.randn(1,4,32),masks)
+    result['loss'].backward()
+    backbone_grad=m.llm_backbone.embed_tokens.weight.grad
+    assert bool(backbone_grad is not None and backbone_grad.abs().sum()>0)==(not insulated)
+    assert m.action_out_proj.projector.weight.grad is not None
+
+
+def test_expert_only_training_step_does_not_execute_text_loss(monkeypatch):
+    from fluxvla.training.subtask.train import Loss, configure_trainable_parameters
+    m=build_vla_from_cfg(tiny_config(hl_loss_weight=0.,fast_loss_weight=0.,
+        action_loss_weight=1.,stop_gradient_flow_to_prefix=True,
+        low_level_text_attention='causal'))
+    configure_trainable_parameters(m,'action_expert')
+    def forbidden(*args,**kwargs):
+        raise AssertionError('expert-only stage executed text branch')
+    monkeypatch.setattr(m,'forward_high_level',forbidden)
+    images,masks=image_batch(batch=1)
+    b=dict(images=images,img_masks=masks,real=torch.tensor([True]),
+        low_input_ids=torch.tensor([[2,3,4]]),low_valid_mask=torch.ones(1,3,dtype=torch.bool),
+        actions=torch.randn(1,4,32),action_masks=torch.ones(1,4,32))
+    optimizer=torch.optim.AdamW([p for p in m.parameters() if p.requires_grad],lr=1e-3)
+    before=m.llm_backbone.embed_tokens.weight.detach().clone()
+    loss,raw=Loss(m,True)(b,torch.ones(3))
+    assert raw[0]==0 and raw[1]==0 and torch.isfinite(loss)
+    loss.backward();optimizer.step()
+    torch.testing.assert_close(before,m.llm_backbone.embed_tokens.weight,rtol=0,atol=0)

@@ -35,11 +35,14 @@ class PI05Subtask(PI05FlowMatching):
     def __init__(self, hl_loss_weight=1.0, action_loss_weight=1.0, fast_loss_weight=1.0,
                  fast_vocab_size=None, fast_skip_tokens=128, exact_beta_time=True,
                  rope_precision='jax', attn_math='fp32', warn_on_bf16_cache=True,
-                 low_level_prefix_source='generation',
+                 low_level_prefix_source='generation', low_level_task_independent=False,
                  stop_gradient_flow_to_prefix=False, text_use_cache=False,
                  action_prefix_cache=False, flow_prefix_cache=False,
-                 text_decode_fp32=False, **kwargs):
+                 text_decode_fp32=False, low_level_text_attention='bidirectional', loss_reduction='global', **kwargs):
         super().__init__(**kwargs)
+        if loss_reduction not in ("local", "global"):
+            raise ValueError("unsupported loss reduction")
+        self.loss_reduction = loss_reduction
         for name, value in (('hl_loss_weight', hl_loss_weight),
                             ('action_loss_weight', action_loss_weight),
                             ('fast_loss_weight', fast_loss_weight)):
@@ -55,8 +58,9 @@ class PI05Subtask(PI05FlowMatching):
             vocab = self.llm_backbone.config.vocab_size
             if vocab - 1 - fast_skip_tokens - fast_vocab_size + 1 < 0:
                 raise ValueError('FAST vocabulary does not fit below the model vocabulary')
-        # The inherited sampler approximates Beta(1.5,1) with U^(1/1.5), which is only
-        # Gamma(1.5) for shape <= 1. Keep it behind a flag so legacy runs stay reproducible.
+        # Old bundles may contain exact_beta_time=True; False must never restore the bug.
+        if exact_beta_time is not True:
+            raise ValueError("exact_beta_time=False is unsupported; time_sampler must be 'beta'")
         if rope_precision not in ('jax', 'hf'):
             raise ValueError("rope_precision must be 'jax' or 'hf'")
         # 'jax' = openpi/big_vision (f32 rotate, downcast result); 'hf' = legacy behaviour.
@@ -68,6 +72,9 @@ class PI05Subtask(PI05FlowMatching):
             raise ValueError("low_level_prefix_source must be 'generation' or 'text'")
         # 'generation' = Ke-Wang: reuse the KV produced while generating the subtask.
         # 'text'       = rebuild the low-level prefix from the decoded text (train-consistent).
+        if low_level_task_independent and low_level_prefix_source != 'text':
+            raise ValueError('task-independent low-level conditioning requires rebuilt text prefix')
+        self.low_level_task_independent = bool(low_level_task_independent)
         self.low_level_prefix_source = low_level_prefix_source
         self.attn_math = attn_math
         self.rope_precision = rope_precision
@@ -78,14 +85,22 @@ class PI05Subtask(PI05FlowMatching):
         self.action_prefix_cache = action_prefix_cache
         self.flow_prefix_cache = flow_prefix_cache
         self.text_decode_fp32 = text_decode_fp32
+        if low_level_text_attention not in ('causal', 'bidirectional'):
+            raise ValueError('unsupported low_level_text_attention')
+        self.low_level_text_attention = low_level_text_attention
 
-    def sample_time(self, bsize, device):
-        if not self.exact_beta_time:
-            return super().sample_time(bsize, device)
-        alpha = torch.tensor(1.5, device=device)
-        beta = torch.tensor(1.0, device=device)
-        time = torch.distributions.Beta(alpha, beta).sample((bsize,)) * 0.999 + 0.001
-        return time.to(dtype=torch.float32, device=device)
+    def _loss_mean(self, total, count):
+        if self.loss_reduction == 'local':
+            return total / (count + 1e-8)
+        return global_weighted_mean(total, count)
+
+    def embed_prefix(self, images, lang_tokens, img_masks, lang_masks, *args, **kwargs):
+        prefix, valid, ar = super().embed_prefix(
+            images, lang_tokens, img_masks, lang_masks, *args, **kwargs)
+        if self.low_level_text_attention == 'causal':
+            ar = ar.clone()
+            ar[:, -lang_tokens.shape[1]:] = True
+        return prefix, valid, ar
 
     def _assert_no_fast_tokens(self, token_ids, where):
         """The low-level prefix must never carry FAST action tokens (leak guard)."""
@@ -181,7 +196,7 @@ class PI05Subtask(PI05FlowMatching):
             subtask_nll, subtask_weights = nll[flat_subtask], weights[flat_subtask]
             action_nll, action_weights = nll[flat_action], weights[flat_action]
         # Keep a zero-supervision graph without all-ignored mean-CE NaNs.
-        loss_subtask = global_weighted_mean((subtask_nll * subtask_weights).sum(),
+        loss_subtask = self._loss_mean((subtask_nll * subtask_weights).sum(),
                                             subtask_weights.sum())
         output = dict(loss_subtask=loss_subtask, loss=loss_subtask,
                       target_count=subtask_weights.sum().detach(),
@@ -190,7 +205,7 @@ class PI05Subtask(PI05FlowMatching):
         if return_logits:
             output['logits'] = self.project_text(hidden[:, offset:]).float()
         if action_nll is not None:
-            loss_action_ce = global_weighted_mean((action_nll * action_weights).sum(),
+            loss_action_ce = self._loss_mean((action_nll * action_weights).sum(),
                                                   action_weights.sum())
             output.update(loss_action_ce=loss_action_ce, loss=loss_subtask + loss_action_ce,
                           action_target_count=action_weights.sum().detach())
@@ -198,9 +213,7 @@ class PI05Subtask(PI05FlowMatching):
 
     def forward_low_level(self, images, states, ll_input_ids, ll_valid_mask, actions,
                           img_masks, action_masks=None, has_action=None,
-                          sample_weight=None, noise=None, time=None, use_prefix_cache=None):
-        if self.rtc_training_config and self.rtc_training_config.get('enabled', False):
-            raise ValueError('Architecture v1 requires RTC disabled for explicit global reduction')
+                          sample_weight=None, noise=None, time=None, use_prefix_cache=None, rtc_delays=None):
         self._assert_no_fast_tokens(ll_input_ids, 'Low-level prefix')
         noise = self.sample_noise(actions.shape, actions.device) if noise is None else noise
         time = self.sample_time(actions.shape[0], actions.device) if time is None else time
@@ -210,29 +223,43 @@ class PI05Subtask(PI05FlowMatching):
         mask = mask.expand_as(actions).to(actions)
         if has_action is not None:
             mask = mask * has_action[:, None, None].to(mask)
+        t = time
+        if self.rtc_training_config and self.rtc_training_config.get('enabled', False):
+            from fluxvla.engines.utils.rtc_training import apply_rtc_time_conditioning, sample_training_delay
+            if rtc_delays is None:
+                rtc_delays = sample_training_delay(
+                    actions.shape[0], self.rtc_training_config.get('max_delay', 5),
+                    self.rtc_training_config.get('distribution', 'exponential'),
+                    self.rtc_training_config.get('temperature', 1.), actions.device)
+            t, mask = apply_rtc_time_conditioning(time, mask, rtc_delays, actions.shape[1], clean_time=0.)
+        mixing_time = t[..., None] if t.ndim == 2 else t[:, None, None]
+        x = mixing_time * noise + (1-mixing_time) * actions
         cached = self.flow_prefix_cache if use_prefix_cache is None else use_prefix_cache
         if cached or self.stop_gradient_flow_to_prefix:
             cache = self._prefill_low(images, ll_input_ids, ll_valid_mask, img_masks)
             if self.stop_gradient_flow_to_prefix:
                 cache = cache.detached()
-            x = time[:, None, None]*noise + (1-time[:, None, None])*actions
-            prediction = self._cached_action_velocity(states, x, time, cache)
-            if self.ori_action_dim is not None:
-                prediction = prediction[..., :self.ori_action_dim]
-            result = dict(predictions=prediction)
+            prediction = self._cached_action_velocity(states, x, t, cache)
         else:
-            result = super().forward(
-                images=images, states=states, lang_tokens=ll_input_ids,
-                lang_masks=ll_valid_mask, actions=actions, img_masks=img_masks,
-                action_masks=mask[..., :self.ori_action_dim] if self.ori_action_dim else mask,
-                sample_weight=sample_weight, noise=noise, time=time)
-        # Re-reduce over explicit masks; RTC is rejected above in architecture v1.
+            prefix, valid_prefix, ar_prefix = self.embed_prefix(images, ll_input_ids, img_masks, ll_valid_mask)
+            suffix, valid_suffix, ar_suffix, cond = self.embed_suffix(states, x, t)
+            valid_tokens = torch.cat([valid_prefix, valid_suffix], dim=1)
+            ar = torch.cat([ar_prefix, ar_suffix], dim=1)
+            hidden, _ = self.forward_model(
+                [prefix, suffix], self._prepare_attention_masks_4d(make_att_2d_masks(valid_tokens, ar)),
+                (valid_tokens.long().cumsum(-1)-1).clamp_min(0),
+                use_cache=False, adarms_cond=[None, cond])
+            prediction = self.action_out_proj(hidden[:, -self.n_action_steps:].float())
+        if self.ori_action_dim is not None:
+            prediction = prediction[..., :self.ori_action_dim]
+        result = dict(predictions=prediction)
         target = (noise - actions)[..., :result['predictions'].shape[-1]]
         valid = mask[..., :target.shape[-1]]
         if sample_weight is not None:
             valid = valid * sample_weight[:, None, None].to(valid)
-        result['loss'] = global_weighted_mean(
+        result['loss'] = self._loss_mean(
             ((result['predictions'] - target).square() * valid).sum(), valid.sum())
+        result['valid_action_count'] = valid.sum().detach()
         return result
 
     def forward(self, images, states, hl_input_ids, hl_valid_mask, hl_ar_mask, hl_labels,
@@ -408,6 +435,8 @@ class PI05Subtask(PI05FlowMatching):
         x = self.sample_noise((batch, self.n_action_steps, self.max_action_dim), states.device) if noise is None else noise.clone()
         cached = self.action_prefix_cache if use_cache is None else use_cache
         if prefix_cache is not None:
+            if self.low_level_task_independent:
+                raise ValueError('task-independent low-level conditioning rejects external prefix_cache')
             # Ke-Wang path: the expert reads the KV produced during subtask generation,
             # which already contains the overall task and the generated subtask tokens.
             cached = True
