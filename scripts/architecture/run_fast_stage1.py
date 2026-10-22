@@ -226,7 +226,8 @@ def evaluate(model, packed, prompts, indices, device, fx, state_dim, image_size,
             ar_mask=torch.as_tensor(context['ar_mask'])[None].to(device))
         text = prompts.decode(gen['token_ids'][0].tolist())
         target = clean_reference(subtask).rstrip('.')
-        rows.append(dict(index=int(i), loss_subtask=out['loss_subtask'].item(),
+        rows.append(dict(index=int(i), loss_token=out['loss_token'].item(),
+                         loss_subtask=out['loss_subtask'].item(),
                          loss_fast=float(out['loss_action_ce'].detach()),
                          target=target, predicted=text, eos=bool(gen['finished'][0]),
                          exact=(bool(gen['finished'][0]) and text == target),
@@ -319,13 +320,15 @@ def main():
     if not train:
         raise SystemExit('no training split in fixtures')
     with_actions = model.action_loss_weight > 0
-    weights = dict(subtask=model.hl_loss_weight, fast=model.fast_loss_weight,
+    weights = dict(token=model.token_loss_weight, subtask=model.hl_loss_weight, fast=model.fast_loss_weight,
                    flow=model.action_loss_weight)
+    loss_contract = dict(text_loss_mode=model.text_loss_mode, weights=weights)
     lengths = [len(r) for r in fx.fast_ids]
     header = dict(contract=prompts.variant, preset=args.preset, smoke=bool(args.smoke),
                   all_causal=bool(prompts.all_causal),
                   low_level_sees_task=bool(prompts.low_level_sees_task),
-                  weights=weights, train=len(train), validation=len(validation),
+                  weights=weights, text_loss_mode=model.text_loss_mode,
+                  train=len(train), validation=len(validation),
                   batch_size=args.batch_size, accum=args.accum,
                   mapped_images=bool(fx.mapped),
                   fast_tokens=dict(min=int(min(lengths)), max=int(max(lengths)),
@@ -356,6 +359,8 @@ def main():
     start_step = 0
     if args.resume:
         state = torch.load(args.resume, map_location='cpu', weights_only=True)
+        if (args.resume_optimizer or args.resume_step) and state.get('loss_contract') != loss_contract:
+            raise ValueError('resume objective differs or is missing; use weight-only warm start')
         missing, unexpected = model.load_state_dict(state['model_delta'], strict=False)
         if unexpected:
             raise SystemExit(f'unexpected keys in resume checkpoint: {unexpected[:5]}')
@@ -370,12 +375,12 @@ def main():
     history, evaluations = [], []
     start = time.perf_counter()
     effective = max(1, args.accum)
-    # Distributed: each rank trains on its own shard of the anchor list; the loss already
-    # does a global all-reduce (global_weighted_mean), so DDP averaging stays correct.
+    # Current presets use rank/microbatch-local valid means; accumulation and DDP
+    # average these objectives equally, not as one globally concatenated token batch.
     shard = train[rank::world_size] if world_size > 1 else train
     for step in range(start_step + 1, args.steps + 1):
         optimizer.zero_grad(set_to_none=True)
-        totals = dict(loss=0.0, loss_subtask=0.0, loss_fast=0.0, loss_flow=None)
+        totals = dict(loss=0.0, loss_token=0.0, loss_subtask=0.0, loss_fast=0.0, loss_flow=None)
         for _ in range(effective):
             picked = rng.integers(0, len(shard), size=args.batch_size).tolist()
             sample_indices = [shard[i] for i in picked]
@@ -395,6 +400,7 @@ def main():
                     ll_valid_mask=batch['low_valid_mask'],
                     actions=batch['actions'], action_masks=batch['action_masks'])
                 loss = result['loss']
+                token_loss = result['loss_token'].detach()
                 subtask_loss, fast_loss, flow_loss = (result['loss_subtask'],
                                                       result['loss_fast'], result['loss_action'])
             else:
@@ -403,7 +409,9 @@ def main():
                     batch['high_ar_mask'], batch['high_labels'], batch['img_masks'],
                     hl_subtask_region_mask=batch['high_subtask_region_mask'],
                     hl_action_region_mask=batch['high_action_region_mask'])
-                loss = (weights['subtask'] * high['loss_subtask']
+                token_loss = high['loss_token'].detach()
+                loss = (weights['token'] * high['loss_token'] if model.text_loss_mode == 'unified_token'
+                        else weights['subtask'] * high['loss_subtask']
                         + weights['fast'] * high['loss_action_ce'])
                 subtask_loss, fast_loss, flow_loss = (high['loss_subtask'].detach(),
                                                       high['loss_action_ce'].detach(), None)
@@ -411,6 +419,7 @@ def main():
                 raise SystemExit(f'non-finite loss at step {step} on rank {rank}')
             (loss / effective).backward()
             totals['loss'] += float(loss.detach()) / effective
+            totals['loss_token'] += float(token_loss) / effective
             totals['loss_subtask'] += float(subtask_loss) / effective
             totals['loss_fast'] += float(fast_loss) / effective
             if flow_loss is not None:
@@ -421,7 +430,8 @@ def main():
             raise SystemExit(f'non-finite gradient at step {step} on rank {rank}')
         optimizer.step()
         row = dict(step=step, grad_norm=round(float(grad_norm), 3),
-                   loss=round(totals['loss'], 6), loss_subtask=round(totals['loss_subtask'], 6),
+                   loss=round(totals['loss'], 6), loss_token=round(totals['loss_token'], 6),
+                   loss_subtask=round(totals['loss_subtask'], 6),
                    loss_fast=round(totals['loss_fast'], 6),
                    loss_flow=(None if totals['loss_flow'] is None
                               else round(totals['loss_flow'], 6)))
@@ -450,7 +460,8 @@ def main():
         torch.save(dict(model_delta={n: p.detach().cpu() for n, p in model.named_parameters()
                                  if p.requires_grad},
                     optimizer=optimizer.state_dict(), step=args.steps,
-                    contract=prompts.version, preset=args.preset, smoke=bool(args.smoke)),
+                    contract=prompts.version, loss_contract=loss_contract,
+                    preset=args.preset, smoke=bool(args.smoke)),
                    out / 'model_delta.pt')
     if rank != 0:
         ddp_cleanup(rank, world_size)

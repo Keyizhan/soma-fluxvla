@@ -106,7 +106,15 @@ def atomic_full(model, opt, path, metadata, rng, reserve_bytes):
 
 
 def bundle_assets(cfg, model_cfg, metadata):
-    from .config import PROMPT_CONTRACT, HIGH_LEVEL_ATTENTION
+    from .config import PROMPT_CONTRACT, HIGH_LEVEL_ATTENTION, validate_loss_contract
+    loss_contract = validate_loss_contract(cfg, model_cfg, metadata['preset'])
+    if loss_contract is not None:
+        recorded = metadata.get('config', cfg)
+        for key in ('loss_objective', 'joint_flow_weight'):
+            if recorded.get(key) != cfg[key] or metadata.get(key, cfg[key]) != cfg[key]:
+                raise ValueError('checkpoint metadata loss objective differs from export configuration')
+        if 'model_config' in metadata:
+            validate_loss_contract(cfg, metadata['model_config'], metadata['preset'])
     paper = cfg.get('prompt_contract') == PROMPT_CONTRACT
     if cfg.get('prompt_contract') not in (None, PROMPT_CONTRACT):
         raise ValueError('unsupported deployment prompt contract')
@@ -149,6 +157,8 @@ def bundle_assets(cfg, model_cfg, metadata):
         preset=metadata['preset'], smoke=metadata.get('smoke', False))
     if paper:
         contract['prompt_contract'] = PROMPT_CONTRACT
+    if loss_contract is not None:
+        contract['training_objective'] = loss_contract
     return native, samples['normalization'], contract
 
 

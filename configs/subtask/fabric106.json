@@ -1,5 +1,5 @@
 {
   "extends": "common.json",
   "training_method": "hybrid",
-  "output": "work_dirs/goal_text_v1_paper_prefix_hybrid/seed-{seed}"
+  "output": "work_dirs/goal_text_v1_paper_prefix_token_ce_v1_hybrid/seed-{seed}"
 }

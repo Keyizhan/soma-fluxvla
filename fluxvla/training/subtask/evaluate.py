@@ -1,4 +1,4 @@
-"""Loss-weight independent three-metric evaluation of a deployment bundle."""
+"""Loss-weight independent evaluation with token CE counts and contributions."""
 import argparse
 import json
 from pathlib import Path
@@ -20,7 +20,8 @@ def main():
         raise ValueError('evaluation cache/common configuration differs from bundle')
     model,model_cfg=build_model(meta['preset'],meta.get('smoke',False),device,None,
         torch.bfloat16 if cfg['dtype']=='bf16' else torch.float32,cfg['attn_math'],
-        time_sampler=cfg['time_sampler'],time_beta_alpha=cfg['time_beta_alpha'],time_beta_beta=cfg['time_beta_beta'])
+        time_sampler=cfg['time_sampler'],time_beta_alpha=cfg['time_beta_alpha'],time_beta_beta=cfg['time_beta_beta'],
+        loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'])
     load_bundle(model,Path(a.bundle))
     fx=Fixtures(cfg['cache'])
     tok=build_tokenizer_from_cfg(dict(type='PretrainedTokenizer',model_path=cfg['tokenizer']))

@@ -4,6 +4,7 @@ Sources and departures are documented in docs/research/pi05_subtask.md.
 No new LM head parameters: logits use the verified input embedding transpose.
 """
 import warnings
+import math
 
 from contextlib import nullcontext
 
@@ -33,6 +34,7 @@ def global_weighted_mean(total, count):
 @VLAS.register_module()
 class PI05Subtask(PI05FlowMatching):
     def __init__(self, hl_loss_weight=1.0, action_loss_weight=1.0, fast_loss_weight=1.0,
+                 text_loss_mode='separate', token_loss_weight=0.0,
                  fast_vocab_size=None, fast_skip_tokens=128, exact_beta_time=True,
                  rope_precision='jax', attn_math='fp32', warn_on_bf16_cache=True,
                  low_level_prefix_source='generation', low_level_task_independent=False,
@@ -43,11 +45,20 @@ class PI05Subtask(PI05FlowMatching):
         if loss_reduction not in ("local", "global"):
             raise ValueError("unsupported loss reduction")
         self.loss_reduction = loss_reduction
+        if text_loss_mode not in ('separate', 'unified_token'):
+            raise ValueError('unsupported text_loss_mode')
         for name, value in (('hl_loss_weight', hl_loss_weight),
                             ('action_loss_weight', action_loss_weight),
-                            ('fast_loss_weight', fast_loss_weight)):
-            if value < 0:
-                raise ValueError(f'{name} must be nonnegative')
+                            ('fast_loss_weight', fast_loss_weight),
+                            ('token_loss_weight', token_loss_weight)):
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f'{name} must be finite and nonnegative')
+        if text_loss_mode == 'unified_token' and (hl_loss_weight != 0 or fast_loss_weight != 0):
+            raise ValueError('unified_token requires zero separate hl/fast loss weights')
+        if text_loss_mode == 'separate' and token_loss_weight != 0:
+            raise ValueError('separate text loss cannot use token_loss_weight')
+        self.text_loss_mode = text_loss_mode
+        self.token_loss_weight = token_loss_weight
         # hl = subtask CE, fast = FAST action-token CE, action = flow-matching MSE.
         self.hl_loss_weight = hl_loss_weight
         self.fast_loss_weight = fast_loss_weight
@@ -175,6 +186,9 @@ class PI05Subtask(PI05FlowMatching):
                     raise ValueError(f'{name} region must be valid causal targets')
             if torch.any(hl_subtask_region_mask.bool() & hl_action_region_mask.bool()):
                 raise ValueError('Subtask and action regions must be disjoint')
+            if self.text_loss_mode == 'unified_token' and torch.any(
+                    (hl_subtask_region_mask.bool() | hl_action_region_mask.bool()) != supervised):
+                raise ValueError('unified_token regions must cover exactly all supervised targets')
         targets = hl_labels[:, 1:]
         target_mask = targets != -100
         if has_hl is not None:
@@ -196,19 +210,29 @@ class PI05Subtask(PI05FlowMatching):
             subtask_nll, subtask_weights = nll[flat_subtask], weights[flat_subtask]
             action_nll, action_weights = nll[flat_action], weights[flat_action]
         # Keep a zero-supervision graph without all-ignored mean-CE NaNs.
-        loss_subtask = self._loss_mean((subtask_nll * subtask_weights).sum(),
-                                            subtask_weights.sum())
+        subtask_sum = (subtask_nll * subtask_weights).sum()
+        subtask_count = subtask_weights.sum()
+        fast_sum = nll.sum() * 0 if action_nll is None else (action_nll * action_weights).sum()
+        fast_count = subtask_count.new_zeros(()) if action_weights is None else action_weights.sum()
+        token_count = subtask_count + fast_count
+        loss_token = self._loss_mean(subtask_sum + fast_sum, token_count)
+        loss_subtask = self._loss_mean(subtask_sum, subtask_count)
         output = dict(loss_subtask=loss_subtask, loss=loss_subtask,
-                      target_count=subtask_weights.sum().detach(),
+                      loss_token=loss_token, token_count=token_count.detach(),
+                      subtask_nll_sum=subtask_sum, fast_nll_sum=fast_sum,
+                      token_subtask_contribution=self._loss_mean(subtask_sum, token_count),
+                      token_fast_contribution=self._loss_mean(fast_sum, token_count),
+                      target_count=subtask_count.detach(),
                       loss_action_ce=None,
                       action_target_count=torch.zeros((), device=loss_subtask.device))
         if return_logits:
             output['logits'] = self.project_text(hidden[:, offset:]).float()
         if action_nll is not None:
-            loss_action_ce = self._loss_mean((action_nll * action_weights).sum(),
-                                                  action_weights.sum())
+            loss_action_ce = self._loss_mean(fast_sum, fast_count)
             output.update(loss_action_ce=loss_action_ce, loss=loss_subtask + loss_action_ce,
-                          action_target_count=action_weights.sum().detach())
+                          action_target_count=fast_count.detach())
+        if self.text_loss_mode == 'unified_token':
+            output['loss'] = loss_token
         return output
 
     def forward_low_level(self, images, states, ll_input_ids, ll_valid_mask, actions,
@@ -257,8 +281,8 @@ class PI05Subtask(PI05FlowMatching):
         valid = mask[..., :target.shape[-1]]
         if sample_weight is not None:
             valid = valid * sample_weight[:, None, None].to(valid)
-        result['loss'] = self._loss_mean(
-            ((result['predictions'] - target).square() * valid).sum(), valid.sum())
+        result['action_squared_error_sum'] = ((result['predictions'] - target).square() * valid).sum()
+        result['loss'] = self._loss_mean(result['action_squared_error_sum'], valid.sum())
         result['valid_action_count'] = valid.sum().detach()
         return result
 
@@ -275,17 +299,27 @@ class PI05Subtask(PI05FlowMatching):
             images, states, ll_input_ids, ll_valid_mask, actions, img_masks,
             action_masks=action_masks, has_action=has_action, sample_weight=sample_weight,
             noise=noise, time=time)
-        loss = (self.hl_loss_weight * high['loss_subtask']
-                + self.action_loss_weight * low['loss'])
-        loss_fast = None
-        if high['loss_action_ce'] is not None:
-            loss_fast = high['loss_action_ce']
-            loss = loss + self.fast_loss_weight * loss_fast
+        loss_fast = high['loss_action_ce']
+        if self.text_loss_mode == 'unified_token':
+            loss = self.token_loss_weight * high['loss_token'] + self.action_loss_weight * low['loss']
+            subtask_metric = high['loss_subtask']
+            fast_metric = loss_fast
+        else:
+            loss = self.hl_loss_weight * high['loss_subtask'] + self.action_loss_weight * low['loss']
+            if loss_fast is not None:
+                loss = loss + self.fast_loss_weight * loss_fast
+            subtask_metric = self.hl_loss_weight * high['loss_subtask']
+            fast_metric = None if loss_fast is None else self.fast_loss_weight * loss_fast
         return dict(loss=loss,
-                    loss_subtask=(self.hl_loss_weight * high['loss_subtask']).detach(),
-                    loss_hl=(self.hl_loss_weight * high['loss_subtask']).detach(),
-                    loss_fast=(None if loss_fast is None
-                               else (self.fast_loss_weight * loss_fast).detach()),
+                    loss_subtask=subtask_metric.detach(), loss_hl=subtask_metric.detach(),
+                    loss_fast=None if fast_metric is None else fast_metric.detach(),
+                    loss_token=high['loss_token'],
+                    subtask_ce=high['loss_subtask'].detach(),
+                    fast_ce=None if loss_fast is None else loss_fast.detach(),
+                    token_count=high['token_count'],
+                    subtask_nll_sum=high['subtask_nll_sum'], fast_nll_sum=high['fast_nll_sum'],
+                    token_subtask_contribution=high['token_subtask_contribution'],
+                    token_fast_contribution=high['token_fast_contribution'],
                     loss_action=(self.action_loss_weight * low['loss']).detach(),
                     target_count=high['target_count'],
                     action_target_count=high['action_target_count'],

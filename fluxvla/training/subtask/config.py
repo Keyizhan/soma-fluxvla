@@ -6,6 +6,7 @@ from pathlib import Path
 PROMPT_CONTRACT = 'pi05-subtask-paper-v1'
 CACHE_VERSION = 'controlled-goal-text-paper-v3'
 HIGH_LEVEL_ATTENTION = 'full_prefix_causal_outputs'
+LOSS_OBJECTIVE = 'unified-token-ce-v1'
 
 def merge(base, override):
     result=copy.deepcopy(base)
@@ -24,6 +25,13 @@ def load_config(path):
 
 def resolve_config(result):
     result=copy.deepcopy(result)
+    result.setdefault('loss_objective', LOSS_OBJECTIVE)
+    if result['loss_objective'] != LOSS_OBJECTIVE:
+        raise ValueError('unsupported loss_objective; use unified-token-ce-v1')
+    flow_weight = result.setdefault('joint_flow_weight', 1.0)
+    if (isinstance(flow_weight, bool) or not isinstance(flow_weight, (int, float))
+            or not 0 < flow_weight < float('inf')):
+        raise ValueError('joint_flow_weight must be finite and positive')
     result.setdefault('prompt_contract', PROMPT_CONTRACT)
     if result['prompt_contract'] != PROMPT_CONTRACT:
         raise ValueError('unsupported training prompt_contract; use the paper conditioning contract')
@@ -60,7 +68,14 @@ def check_comparison(configs):
     if len({c['training_method'] for c in configs})!=len(configs):
         raise ValueError('duplicate methods in comparison')
     from .common import validate_training_method
-    for cfg in configs:validate_training_method(cfg)
+    for cfg in configs:
+        validate_training_method(cfg)
+        if cfg.get('loss_objective') != LOSS_OBJECTIVE:
+            raise ValueError('comparison requires unified-token-ce-v1 loss_objective')
+        weight = cfg.get('joint_flow_weight')
+        if (isinstance(weight, bool) or not isinstance(weight, (int, float))
+                or not 0 < weight < float('inf')):
+            raise ValueError('joint_flow_weight must be finite and positive')
     reference=common_identity(configs[0])
     if any(common_identity(c)!=reference for c in configs[1:]):
         raise ValueError('non-allowlisted resolved configuration difference')
@@ -73,6 +88,35 @@ def stage1_identity(cfg):
     result=common_identity(cfg)
     result['stages']=[copy.deepcopy(s) for s in cfg['stages'] if s['name']=='stage1']
     return result
+
+
+def validate_loss_contract(cfg, model_cfg, preset):
+    """Reject silent objective changes while still allowing explicit legacy bundles."""
+    objective = cfg.get('loss_objective')
+    mode = model_cfg.get('text_loss_mode', 'separate')
+    if objective is None:
+        if mode != 'separate':
+            raise ValueError('unified-token model requires explicit loss_objective')
+        return None
+    if objective != LOSS_OBJECTIVE:
+        raise ValueError('unsupported deployment loss_objective')
+    flow_weight = cfg.get('joint_flow_weight')
+    if (isinstance(flow_weight, bool) or not isinstance(flow_weight, (int, float))
+            or not 0 < flow_weight < float('inf')):
+        raise ValueError('joint_flow_weight must be finite and positive')
+    if preset not in ('stage1_fast', 'hybrid', 'hybrid_insulated', 'action_expert', 'flow_only'):
+        raise ValueError('unsupported unified-token preset')
+    expected_token = 0. if preset in ('action_expert', 'flow_only') else 1.
+    expected_flow = (flow_weight if preset in ('hybrid', 'hybrid_insulated')
+                     else 0. if preset == 'stage1_fast' else 1.)
+    expected = dict(text_loss_mode='unified_token', token_loss_weight=expected_token,
+                    hl_loss_weight=0., fast_loss_weight=0., action_loss_weight=expected_flow)
+    if any(model_cfg.get(key) != value for key, value in expected.items()):
+        raise ValueError('model loss settings disagree with loss_objective/preset')
+    return dict(name=LOSS_OBJECTIVE, text_loss_mode=mode,
+                token_loss_weight=expected_token, flow_loss_weight=expected_flow,
+                joint_flow_weight=flow_weight,
+                token_reduction='sum valid subtask and FAST NLL / sum valid token counts')
 
 
 def canonical_prompts(tokenizer,cfg):

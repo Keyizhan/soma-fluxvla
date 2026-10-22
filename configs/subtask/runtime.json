@@ -2,7 +2,7 @@
   "seed": 1702,
   "incoming": "D:/pi05_subtask/ours/dataset_goal_text_v1",
   "cache": "cache/goal_text_v1_paper_prefix",
-  "shared_stage1_root": "work_dirs/shared_goal_text_v1_paper_prefix",
+  "shared_stage1_root": "work_dirs/shared_goal_text_v1_paper_prefix_token_ce_v1",
   "pretrained": "checkpoints/pi05_base",
   "tokenizer": "checkpoints/pi05_base",
   "dtype": "bf16",

@@ -15,14 +15,16 @@ def load():
     return runpy.run_path(str(CONFIG))
 
 
-def test_presets_have_the_reference_weights():
+def test_presets_use_unified_token_objectives():
     ns = load()
     weights = {name: preset['contract']['weights'] for name, preset in ns['PRESETS'].items()}
-    assert weights['stage1_fast'] == dict(subtask=10.0, fast=1.0, flow=0.0)
-    assert weights['flow_only'] == dict(subtask=0.0, fast=0.0, flow=1.0)
-    assert weights['hybrid'] == dict(subtask=0.15, fast=0.15, flow=1.0)
+    assert weights['stage1_fast'] == dict(token=1.0, flow=0.0)
+    assert weights['flow_only'] == dict(token=0.0, flow=1.0)
+    assert weights['hybrid'] == weights['hybrid_insulated'] == dict(token=1.0, flow=1.0)
     # Default export is stage 1: the missing half of knowledge insulation.
-    assert ns['model']['fast_loss_weight'] == 1.0
+    assert ns['model']['fast_loss_weight'] == ns['model']['hl_loss_weight'] == 0.0
+    assert ns['model']['token_loss_weight'] == 1.0
+    assert ns['model']['text_loss_mode'] == 'unified_token'
     assert ns['model']['action_loss_weight'] == 0.0
 
 
@@ -45,8 +47,9 @@ def test_collator_carries_the_region_masks():
 
 def test_model_builds_with_the_fast_loss_enabled():
     model = build_vla_from_cfg(load()['PRESETS']['stage1_fast']['model'])
-    assert model.hl_loss_weight == 10.0
-    assert model.fast_loss_weight == 1.0
+    assert model.hl_loss_weight == model.fast_loss_weight == 0.0
+    assert model.token_loss_weight == 1.0
+    assert model.text_loss_mode == 'unified_token'
     assert model.action_loss_weight == 0.0
     assert model.fast_vocab_size == 2048 and model.fast_skip_tokens == 128
 

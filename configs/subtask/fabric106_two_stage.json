@@ -1,5 +1,5 @@
 {
   "extends": "common.json",
   "training_method": "two_stage",
-  "output": "work_dirs/goal_text_v1_paper_prefix_two_stage/seed-{seed}"
+  "output": "work_dirs/goal_text_v1_paper_prefix_token_ce_v1_two_stage/seed-{seed}"
 }

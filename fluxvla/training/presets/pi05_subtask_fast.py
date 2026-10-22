@@ -1,10 +1,11 @@
 """FAST-token presets for the pi0.5 subtask + knowledge-insulation reproduction.
 
-Weights mirror the reference presets (Ke-Wang1017/openpi_subtask @385d0e8):
-  stage1_fast  10 / 1 / 0    VLM learns an action representation (subtask + FAST CE)
-  flow_only     0 / 0 / 1    flow-matching baseline (our earlier runs)
-  hybrid     0.15 / 0.15 / 1 joint recipe (subtask + FAST + flow)
-`hl` = subtask CE, `fast` = FAST action-token CE, `action` = flow-matching MSE.
+New controlled recipes use one valid-token cross entropy across subtask and FAST:
+  stage1_fast: L_token
+  hybrid / hybrid_insulated: L_token + lambda * L_flow (default lambda=1)
+  action_expert / flow_only: L_flow
+Subtask and FAST means remain separate diagnostics, never extra training weights.
+Legacy separate-weight model configurations remain loadable explicitly.
 
 state_dim=14 encodes only the real Piper dimensions: 32 bins cost 150 prefix tokens,
 Only physical state dimensions are tokenized; action padding stays outside text.
@@ -21,11 +22,12 @@ MAX_TOKEN_LEN = 256
 STATE_DIM = 14
 
 
-def _model(hl, fast, action, stop_gradient=False):
+def _model(token, action, stop_gradient=False):
     model = copy.deepcopy(_BASE)
     model.update(type='PI05Subtask', rtc_training_config=copy.deepcopy(_BASE['rtc_training_config']), ori_action_dim=14,
                  loss_reduction='local',
-                 hl_loss_weight=hl, fast_loss_weight=fast, action_loss_weight=action,
+                 text_loss_mode='unified_token', token_loss_weight=token,
+                 hl_loss_weight=0., fast_loss_weight=0., action_loss_weight=action,
                  fast_vocab_size=FAST_VOCAB_SIZE, fast_skip_tokens=FAST_SKIP_TOKENS,
                  # MUST inherit/use true Beta sampling for all subtask methods.
                  time_sampler='beta', time_beta_alpha=1.5, time_beta_beta=1.0,
@@ -39,10 +41,12 @@ def _model(hl, fast, action, stop_gradient=False):
     return model
 
 
-def _contract(name, hl, fast, action, stop_gradient):
+def _contract(name, token, action, stop_gradient):
     return dict(
         version='pi05-subtask-paper-v1', prompt_contract='pi05-subtask-paper-v1', preset=name,
-        weights=dict(subtask=hl, fast=fast, flow=action),
+        loss_objective='unified-token-ce-v1', text_loss_mode='unified_token',
+        weights=dict(token=token, flow=action),
+        text_reduction='sum valid subtask and FAST NLL / sum valid token weights',
         stop_gradient_flow_to_prefix=stop_gradient,
         high_condition='observation + overall_task',
         low_condition='observation + subtask, bidirectional flow prefix',
@@ -70,17 +74,17 @@ COLLATOR_KEYS = [
     'll_input_ids', 'll_valid_mask', 'has_hl', 'has_action']
 
 # Default export: stage 1 (subtask + FAST, no flow) — the missing half of knowledge insulation.
-model = _model(10.0, 1.0, 0.0)
-architecture_contract = _contract('stage1_fast', 10.0, 1.0, 0.0, False)
+model = _model(1.0, 0.0)
+architecture_contract = _contract('stage1_fast', 1.0, 0.0, False)
 collator = dict(type='DictCollator', keys=COLLATOR_KEYS,
                 meta_keys=['overall_task', 'subtask'])
 
 PRESETS = {
-    'stage1_fast': dict(model=_model(10.0, 1.0, 0.0), contract=_contract('stage1_fast', 10.0, 1.0, 0.0, False)),
-    'action_expert': dict(model=_model(0.0, 0.0, 1.0, True), contract=_contract('action_expert', 0.0, 0.0, 1.0, True)),
-    'flow_only': dict(model=_model(0.0, 0.0, 1.0), contract=_contract('flow_only', 0.0, 0.0, 1.0, False)),
-    'hybrid': dict(model=_model(0.15, 0.15, 1.0), contract=_contract('hybrid', 0.15, 0.15, 1.0, False)),
+    'stage1_fast': dict(model=_model(1.0, 0.0), contract=_contract('stage1_fast', 1.0, 0.0, False)),
+    'action_expert': dict(model=_model(0.0, 1.0, True), contract=_contract('action_expert', 0.0, 1.0, True)),
+    'flow_only': dict(model=_model(0.0, 1.0), contract=_contract('flow_only', 0.0, 1.0, False)),
+    'hybrid': dict(model=_model(1.0, 1.0), contract=_contract('hybrid', 1.0, 1.0, False)),
     'hybrid_insulated': dict(
-        model=_model(0.15, 0.15, 1.0, stop_gradient=True),
-        contract=_contract('hybrid_insulated', 0.15, 0.15, 1.0, True)),
+        model=_model(1.0, 1.0, stop_gradient=True),
+        contract=_contract('hybrid_insulated', 1.0, 1.0, True)),
 }

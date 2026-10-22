@@ -128,9 +128,20 @@ def collate(items, indices, fx, image_size, device, with_actions, n_action_steps
     return batch
 
 def build_model(preset, smoke, device, pretrained=None, dtype=torch.float32,
-                attn_math='bf16', time_sampler='beta', time_beta_alpha=1.5, time_beta_beta=1.0):
+                attn_math='bf16', time_sampler='beta', time_beta_alpha=1.5, time_beta_beta=1.0,
+                loss_objective='unified-token-ce-v1', joint_flow_weight=1.0):
     from fluxvla.training.presets.pi05_subtask_fast import PRESETS
+    from .config import LOSS_OBJECTIVE
+    if loss_objective != LOSS_OBJECTIVE:
+        raise ValueError('controlled model requires unified-token-ce-v1 loss_objective')
+    if (isinstance(joint_flow_weight, bool) or not isinstance(joint_flow_weight, (int, float))
+            or not 0 < joint_flow_weight < float('inf')):
+        raise ValueError('joint_flow_weight must be finite and positive')
     cfg = copy.deepcopy(PRESETS[preset]['model'])
+    cfg.update(text_loss_mode='unified_token', hl_loss_weight=0., fast_loss_weight=0.,
+               token_loss_weight=0. if preset in ('action_expert', 'flow_only') else 1.)
+    cfg['action_loss_weight'] = (joint_flow_weight if preset in ('hybrid', 'hybrid_insulated')
+                                else 0. if preset == 'stage1_fast' else 1.)
     cfg['pretrained_name_or_path'] = None if smoke else pretrained
     cfg['attn_math'] = attn_math
     cfg.update(time_sampler=time_sampler, time_beta_alpha=time_beta_alpha, time_beta_beta=time_beta_beta)

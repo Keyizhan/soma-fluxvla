@@ -70,5 +70,7 @@
   "split_manifest": "configs/subtask/goal_text_v1_split.json",
   "augmentation": false,
   "ema": false,
-  "prompt_contract": "pi05-subtask-paper-v1"
+  "prompt_contract": "pi05-subtask-paper-v1",
+  "loss_objective": "unified-token-ce-v1",
+  "joint_flow_weight": 1.0
 }

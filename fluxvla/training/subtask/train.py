@@ -75,10 +75,13 @@ class Loss(torch.nn.Module):
     def __init__(self,model,with_actions,metrics=False):
         super().__init__();self.model=model;self.with_actions=with_actions;self.metrics=metrics
 
-    def forward(self,b,factors,return_counts=False):
+    def forward(self,b,factors,return_counts=False,return_statistics=False):
         m=self.model
         counts=torch.zeros(3,device=b['images'].device)
-        if not self.metrics and m.hl_loss_weight == 0 and m.fast_loss_weight == 0:
+        unified=getattr(m,'text_loss_mode','separate')=='unified_token'
+        text_enabled=(m.token_loss_weight>0 if unified else m.hl_loss_weight>0 or m.fast_loss_weight>0)
+        high=low=None
+        if not self.metrics and not text_enabled:
             raw=[torch.zeros((),device=b['images'].device)]*2
         else:
             high=m.forward_high_level(b['images'],b['high_input_ids'],b['high_valid_mask'],b['high_ar_mask'],
@@ -97,10 +100,74 @@ class Loss(torch.nn.Module):
             raw.append(low['loss'])
             counts[2]=low['valid_action_count']
         else:raw.append(raw[0]*0.)
-        weights=[m.hl_loss_weight,m.fast_loss_weight,m.action_loss_weight]
-        total=sum(v*w*factors[i] for i,(v,w) in enumerate(zip(raw,weights)))
+        if high is not None:
+            sums=[high.get('subtask_nll_sum',raw[0]*counts[0]),
+                  high.get('fast_nll_sum',raw[1]*counts[1])]
+            count=counts[:2].sum()
+            contributions=[high.get('token_subtask_contribution',sums[0]/count.clamp_min(1)),
+                           high.get('token_fast_contribution',sums[1]/count.clamp_min(1))]
+            token=high.get('loss_token',sum(contributions))
+        else:
+            sums=[raw[0],raw[1]]
+            contributions=[raw[0],raw[1]]
+            token=raw[0]
+        sums.append(low.get('action_squared_error_sum',raw[2]*counts[2]) if low is not None else raw[2])
+        flow_term=raw[2]*m.action_loss_weight*factors[2]
+        if unified:
+            if not torch.equal(factors[0],factors[1]):
+                raise ValueError('unified token CE requires equal accumulation factors for both token regions')
+            token_term=token*m.token_loss_weight*factors[0]
+        else:
+            token_term=raw[0]*m.hl_loss_weight*factors[0]+raw[1]*m.fast_loss_weight*factors[1]
+        total=token_term+flow_term
         result=(total,torch.stack([v.detach() for v in raw]))
+        if return_statistics:
+            # Sufficient statistics are pooled by count; optimization entries already
+            # include the accumulation factor and are averaged over ranks only.
+            optimization=torch.stack([total,token*factors[0],
+                contributions[0]*factors[0],contributions[1]*factors[0],token_term,flow_term])
+            statistics=torch.cat([torch.stack(sums).detach().double(),counts.detach().double(),
+                optimization.detach().double(),counts.new_tensor([high is not None]).double()])
+            return (*result,statistics)
         return (*result,counts) if return_counts else result
+
+
+def diagnostic_metrics(sums,counts):
+    """Count-pooled diagnostics, distinct from microbatch-averaged optimization."""
+    if isinstance(sums,torch.Tensor):sums=sums.detach().cpu().tolist()
+    if isinstance(counts,torch.Tensor):counts=counts.detach().cpu().tolist()
+    sums=[float(v) for v in sums];counts=[float(v) for v in counts]
+    def ratio(numerator,denominator):
+        return numerator/denominator if denominator>0 else None
+    token_count=counts[0]+counts[1]
+    nll=sums[0]+sums[1]
+    return dict(metric_scope='global_valid_element_pool',
+        subtask_ce=ratio(sums[0],counts[0]),fast_ce=ratio(sums[1],counts[1]),
+        flow_mse=ratio(sums[2],counts[2]),token_ce=ratio(nll,token_count),
+        subtask_token_count=counts[0],fast_token_count=counts[1],token_count=token_count,
+        flow_element_count=counts[2],subtask_nll_sum=sums[0],fast_nll_sum=sums[1],
+        flow_squared_error_sum=sums[2],
+        subtask_token_fraction=ratio(counts[0],token_count),fast_token_fraction=ratio(counts[1],token_count),
+        token_subtask_contribution=ratio(sums[0],token_count),token_fast_contribution=ratio(sums[1],token_count),
+        subtask_loss_fraction=ratio(sums[0],nll),fast_loss_fraction=ratio(sums[1],nll))
+
+
+def training_metrics(statistics,world=1):
+    """Format already-summed rank statistics; all-reduce must happen first."""
+    if isinstance(statistics,torch.Tensor):statistics=statistics.detach().cpu().tolist()
+    row=diagnostic_metrics(statistics[:3],statistics[3:6])
+    objective,token,subtask,fast,token_term,flow_term=[float(v)/world for v in statistics[6:12]]
+    text_computed=bool(statistics[12]>0)
+    row.update(optimization_scope='equal_microbatch_mean_then_ddp_rank_mean',
+        optimization_loss=objective,
+        optimization_token_ce=token if text_computed else None,
+        optimization_token_subtask_contribution=subtask if text_computed else None,
+        optimization_token_fast_contribution=fast if text_computed else None,
+        optimization_subtask_loss_fraction=subtask/(subtask+fast) if text_computed and subtask+fast>0 else None,
+        optimization_fast_loss_fraction=fast/(subtask+fast) if text_computed and subtask+fast>0 else None,
+        optimization_weighted_token_term=token_term,optimization_weighted_flow_term=flow_term,
+        text_metrics_computed=text_computed)
+    return row
 
 
 def save_deployment(model,out,metadata,world,rank,cfg,model_cfg):
@@ -134,19 +201,17 @@ def validate(loss_model,indices,fx,packed,cfg,image_size,device,horizon,world,ra
     loss_model.eval()
     cfg=dict(cfg,_flow_stream='validation',_flow_update=0)
     micro=cfg['micro_batch'];block=micro*world
-    totals=np.zeros(3);denoms=np.zeros(3)
+    combined=torch.zeros(6,device=device,dtype=torch.float64)
     for start in range(0,len(indices),block):
         full=indices[start:start+block];full+= [-1]*(block-len(full))
         chunk=full[rank*micro:(rank+1)*micro]
         b=make_batch(chunk,fx,packed,cfg,image_size,device,horizon,True)
         with torch.autocast('cuda',dtype=torch.bfloat16,enabled=device.type=='cuda'):
-            _,raw,c=loss_model(b,torch.ones(3,device=device),return_counts=True)
-        totals+=raw.float().cpu().numpy()*c.cpu().numpy();denoms+=c.cpu().numpy()
-    combined=torch.as_tensor(np.stack([totals,denoms]),device=device)
+            _,_,statistics=loss_model(b,torch.ones(3,device=device),return_statistics=True)
+        combined+=statistics[:6]
     if world>1:dist.all_reduce(combined)
-    totals,denoms=combined.cpu().numpy()
     loss_model.train()
-    return dict(zip(['subtask_ce','fast_ce','flow_mse'],(totals/np.maximum(denoms,1)).tolist()))
+    return diagnostic_metrics(combined[:3],combined[3:])
 
 
 def main():
@@ -182,7 +247,8 @@ def main():
     barrier(world)
     model,model_cfg=build_model(stage['preset'],args.smoke,device,cfg['pretrained'],
         torch.bfloat16 if cfg['dtype']=='bf16' else torch.float32,cfg['attn_math'],
-        time_sampler=cfg['time_sampler'],time_beta_alpha=cfg['time_beta_alpha'],time_beta_beta=cfg['time_beta_beta'])
+        time_sampler=cfg['time_sampler'],time_beta_alpha=cfg['time_beta_alpha'],time_beta_beta=cfg['time_beta_beta'],
+        loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'])
     with_actions=model.action_loss_weight>0
     configure_trainable_parameters(model, stage['preset'])
     trainable=[p for p in model.parameters() if p.requires_grad]
@@ -192,7 +258,8 @@ def main():
     steps=math.ceil(len(train)/cfg['global_batch']);total=steps*stage['epochs']
     from .config import stage1_identity
     metadata=dict(stage1_identity=stage1_identity(cfg),stage=args.stage,preset=stage['preset'],cache_identity=identity,config=cfg,world_size=world,
-        steps_per_epoch=steps,total_updates=total,smoke=args.smoke,contract=prompts.variant)
+        steps_per_epoch=steps,total_updates=total,smoke=args.smoke,contract=prompts.variant,
+        loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'])
     # Include model/normalization identity in the recovery contract, not just trainable tensors.
     metadata['model_config']=model_cfg
     metadata['normalization_sha256']=hashlib.sha256(json.dumps(json.loads((Path(cfg['cache'])/'samples.json').read_text())['normalization'],sort_keys=True).encode()).hexdigest()
@@ -287,23 +354,28 @@ def main():
             update+=1
             lr=lr_at(update,total,stage['peak_lr'],cfg['warmup_fraction'],cfg['min_lr_ratio'])
             for group in opt.param_groups:group['lr']=lr
-            values=torch.zeros(3,device=device)
+            statistics=torch.zeros(13,device=device,dtype=torch.float64)
             for micro_index,chunk in enumerate(batches):
                 b=make_batch(chunk,fx,packed,dict(cfg,_flow_update=update),image_size,device,horizon,with_actions)
                 factors=torch.full((3,),1./len(batches),device=device)
                 sync=wrapped.no_sync() if world>1 and micro_index<len(batches)-1 else nullcontext()
                 with sync:
                     with torch.autocast('cuda',dtype=torch.bfloat16,enabled=device.type=='cuda' and cfg['dtype']=='bf16'):
-                        loss,raw=wrapped(b,factors)
+                        loss,_,micro_statistics=wrapped(b,factors,return_statistics=True)
                     if not torch.isfinite(loss):raise FloatingPointError('nonfinite training loss')
                     loss.backward()
-                values+=raw*factors
+                statistics+=micro_statistics
             grad=torch.nn.utils.clip_grad_norm_(trainable,cfg['grad_clip'])
             if not torch.isfinite(grad):raise FloatingPointError('nonfinite gradient norm')
             opt.step()
+            # Logging uses sums/counts across every rank, never just rank zero.
+            # This reduction is detached and does not alter DDP optimization.
+            if world>1:dist.all_reduce(statistics)
             if rank==0:
                 row=dict(stage=args.stage,epoch=epoch,update=update,total_updates=total,lr=lr,
-                    subtask_ce=float(values[0]),fast_ce=float(values[1]),flow_mse=float(values[2]),grad_norm=float(grad))
+                    grad_norm=float(grad),text_loss_mode=model.text_loss_mode,
+                    token_loss_weight=model.token_loss_weight,flow_loss_weight=model.action_loss_weight,
+                    **training_metrics(statistics,world))
                 with (out/'metrics.jsonl').open('a') as f:f.write(json.dumps(row)+'\n')
                 if update%10==0 or update%steps==0 or update==1:print(json.dumps(row),flush=True)
             stop_now=args.stop_after_update is not None and update>=args.stop_after_update

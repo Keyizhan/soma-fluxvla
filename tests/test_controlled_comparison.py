@@ -115,9 +115,9 @@ def test_paper_contract_is_shared_and_old_training_contract_rejected():
     for cfg in configs():
         assert cfg['prompt_contract']==PROMPT_CONTRACT
         assert cfg['version']==CACHE_VERSION
-        assert cfg['output']==f"work_dirs/goal_text_v1_paper_prefix_{cfg['training_method']}/seed-{cfg['seed']}"
+        assert cfg['output']==f"work_dirs/goal_text_v1_paper_prefix_token_ce_v1_{cfg['training_method']}/seed-{cfg['seed']}"
         assert cfg['cache'].endswith('goal_text_v1_paper_prefix')
-        assert cfg['shared_stage1_root'].endswith('shared_goal_text_v1_paper_prefix')
+        assert cfg['shared_stage1_root'].endswith('shared_goal_text_v1_paper_prefix_token_ce_v1')
     with pytest.raises(ValueError,match='prompt_contract'):
         resolve_config(dict(prompt_contract='legacy'))
 
