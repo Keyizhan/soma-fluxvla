@@ -113,6 +113,8 @@ def bundle_assets(cfg, model_cfg, metadata):
         for key in ('loss_objective', 'joint_flow_weight'):
             if recorded.get(key) != cfg[key] or metadata.get(key, cfg[key]) != cfg[key]:
                 raise ValueError('checkpoint metadata loss objective differs from export configuration')
+        if recorded.get('text_loss') != cfg.get('text_loss'):
+            raise ValueError('checkpoint metadata text_loss differs from export configuration')
         if 'model_config' in metadata:
             validate_loss_contract(cfg, metadata['model_config'], metadata['preset'])
     paper = cfg.get('prompt_contract') == PROMPT_CONTRACT

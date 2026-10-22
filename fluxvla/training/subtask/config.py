@@ -25,8 +25,16 @@ def load_config(path):
 
 def resolve_config(result):
     result=copy.deepcopy(result)
+    if result.get('loss_objective', LOSS_OBJECTIVE) not in (LOSS_OBJECTIVE, 'gated-token-ce-v1'):
+        raise ValueError('unsupported loss_objective')
+    if result.get('loss_objective') == 'gated-token-ce-v1' and 'text_loss' not in result:
+        raise ValueError('gated objective requires text_loss configuration')
+    if 'text_loss' in result:
+        from .text_loss import resolve_text_loss
+        result['text_loss'] = resolve_text_loss(result['text_loss'])
+        result['loss_objective'] = 'gated-token-ce-v1'
     result.setdefault('loss_objective', LOSS_OBJECTIVE)
-    if result['loss_objective'] != LOSS_OBJECTIVE:
+    if result['loss_objective'] not in (LOSS_OBJECTIVE, 'gated-token-ce-v1'):
         raise ValueError('unsupported loss_objective; use unified-token-ce-v1')
     flow_weight = result.setdefault('joint_flow_weight', 1.0)
     if (isinstance(flow_weight, bool) or not isinstance(flow_weight, (int, float))
@@ -70,7 +78,7 @@ def check_comparison(configs):
     from .common import validate_training_method
     for cfg in configs:
         validate_training_method(cfg)
-        if cfg.get('loss_objective') != LOSS_OBJECTIVE:
+        if cfg.get('loss_objective') not in (LOSS_OBJECTIVE, 'gated-token-ce-v1'):
             raise ValueError('comparison requires unified-token-ce-v1 loss_objective')
         weight = cfg.get('joint_flow_weight')
         if (isinstance(weight, bool) or not isinstance(weight, (int, float))
@@ -98,6 +106,22 @@ def validate_loss_contract(cfg, model_cfg, preset):
         if mode != 'separate':
             raise ValueError('unified-token model requires explicit loss_objective')
         return None
+    if objective == 'gated-token-ce-v1':
+        if preset not in ('stage1_fast', 'hybrid', 'hybrid_insulated', 'action_expert', 'flow_only'):
+            raise ValueError('unsupported gated preset')
+        weight = cfg.get('joint_flow_weight')
+        if isinstance(weight, bool) or not isinstance(weight, (int,float)) or not 0 < weight < float('inf'):
+            raise ValueError('joint_flow_weight must be finite and positive')
+        from .text_loss import model_loss_settings
+        expected = model_loss_settings(cfg['text_loss'], preset)
+        if model_cfg.get('normalize_text_weights', False) != cfg['text_loss'].get('normalize_weights', False):
+            raise ValueError('model normalization disagrees with text_loss')
+        if any(model_cfg.get(k) != v for k, v in expected.items()):
+            raise ValueError('model loss settings disagree with text_loss')
+        expected_flow = cfg['joint_flow_weight'] if preset in ('hybrid', 'hybrid_insulated') else 0. if preset == 'stage1_fast' else 1.
+        if model_cfg.get('action_loss_weight') != expected_flow:
+            raise ValueError('model flow settings disagree with preset')
+        return dict(name=objective, text_loss=cfg['text_loss'], flow_loss_weight=expected_flow, schedule_scope='stage_optimizer_updates', weight_normalization=('hierarchical_sum_one_or_weighted_token_mean' if cfg['text_loss'].get('normalize_weights', False) else 'none'))
     if objective != LOSS_OBJECTIVE:
         raise ValueError('unsupported deployment loss_objective')
     flow_weight = cfg.get('joint_flow_weight')
@@ -123,4 +147,5 @@ def canonical_prompts(tokenizer,cfg):
     from fluxvla.transforms.subtask_fast_prompts import PrepareSubtaskFastPrompts
     return PrepareSubtaskFastPrompts(tokenizer,state_dim=14,max_len=cfg['max_prompt_length'],
         model_vocab_size=257152,low_level_action_tail='',low_level_eos=False,low_level_segmented=True,
-        low_level_sees_task=False, all_causal=False, low_level_prompt_format='state_subtask')
+        low_level_sees_task=False, all_causal=False, low_level_prompt_format='state_subtask',
+        subtask_mask_spec=cfg.get('subtask_mask_spec'), subtask_templates=cfg.get('subtask_templates'))

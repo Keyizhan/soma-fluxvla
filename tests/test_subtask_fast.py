@@ -162,6 +162,8 @@ def test_check_rejects_inconsistent_masks():
     broken['loss_mask'][:] = False
     broken['subtask_region_mask'][:] = False
     broken['action_region_mask'][:] = False
+    for key in ('subtask_key_mask', 'subtask_template_mask', 'action_code_mask'):
+        broken[key][:] = False
     with pytest.raises(ValueError, match='No supervised token'):
         p.check(broken)
 

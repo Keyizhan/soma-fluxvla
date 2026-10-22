@@ -21,6 +21,17 @@ from .fixtures import Fixtures, build_model, collate, ddp_setup, ddp_cleanup, pr
 from fluxvla.engines import build_tokenizer_from_cfg
 
 
+def cleanup_stage1_candidates(candidates, keep_epoch_checkpoints=False):
+    """Remove transient selection snapshots only when retention is disabled."""
+    deleted=[]
+    if not keep_epoch_checkpoints:
+        for _,epoch,_,path in candidates:
+            if path.exists():
+                shutil.rmtree(path)
+                deleted.append(epoch)
+    return deleted
+
+
 def configure_trainable_parameters(model, preset):
     """Freeze inactive branches explicitly, including vision in expert-only mode."""
     with_actions = model.action_loss_weight > 0
@@ -86,7 +97,8 @@ class Loss(torch.nn.Module):
         else:
             high=m.forward_high_level(b['images'],b['high_input_ids'],b['high_valid_mask'],b['high_ar_mask'],
                 b['high_labels'],b['img_masks'],has_hl=b['real'],
-                hl_subtask_region_mask=b['high_subtask_region_mask'],hl_action_region_mask=b['high_action_region_mask'])
+                hl_subtask_region_mask=b['high_subtask_region_mask'],hl_action_region_mask=b['high_action_region_mask'],
+                **{k: b['high_'+k[3:]] for k in ('hl_subtask_key_mask','hl_subtask_template_mask','hl_action_code_mask') if 'high_'+k[3:] in b})
             raw=[high['loss_subtask'],high['loss_action_ce']]
             counts[0]=high['target_count'];counts[1]=high['action_target_count']
         if self.with_actions:
@@ -116,9 +128,11 @@ class Loss(torch.nn.Module):
         if unified:
             if not torch.equal(factors[0],factors[1]):
                 raise ValueError('unified token CE requires equal accumulation factors for both token regions')
-            token_term=token*m.token_loss_weight*factors[0]
+            token_term=(high.get('loss_token_objective',token) if high is not None else token)*m.token_loss_weight*factors[0]
         else:
-            token_term=raw[0]*m.hl_loss_weight*factors[0]+raw[1]*m.fast_loss_weight*factors[1]
+            token_term=(high.get('loss_subtask_objective',raw[0]) if high is not None else raw[0])*m.hl_loss_weight*factors[0]+raw[1]*m.fast_loss_weight*factors[1]
+        weighted_fast = (high.get('token_fast_objective', contributions[1]) if high is not None else contributions[1])*m.token_loss_weight*factors[0] if unified else raw[1]*m.fast_loss_weight*factors[1]
+        weighted_subtask = token_term-weighted_fast
         total=token_term+flow_term
         result=(total,torch.stack([v.detach() for v in raw]))
         if return_statistics:
@@ -128,6 +142,11 @@ class Loss(torch.nn.Module):
                 contributions[0]*factors[0],contributions[1]*factors[0],token_term,flow_term])
             statistics=torch.cat([torch.stack(sums).detach().double(),counts.detach().double(),
                 optimization.detach().double(),counts.new_tensor([high is not None]).double()])
+            extra = []
+            for name in ('subtask_key', 'subtask_template', 'fast_code'):
+                for suffix in ('_nll_sum', '_count'):
+                    extra.append(high.get(name+suffix, counts.new_zeros(())) if high is not None else counts.new_zeros(()))
+            statistics = torch.cat([statistics, torch.stack(extra+[weighted_subtask,weighted_fast]).detach().double()])
             return (*result,statistics)
         return (*result,counts) if return_counts else result
 
@@ -156,6 +175,17 @@ def training_metrics(statistics,world=1):
     """Format already-summed rank statistics; all-reduce must happen first."""
     if isinstance(statistics,torch.Tensor):statistics=statistics.detach().cpu().tolist()
     row=diagnostic_metrics(statistics[:3],statistics[3:6])
+    if len(statistics) >= 19:
+        for index, name in enumerate(('subtask_key', 'subtask_template', 'fast_code')):
+            numerator, count = statistics[13+2*index:15+2*index]
+            row[name+'_ce'] = numerator/count if count > 0 else None
+            row[name+'_token_count'] = count
+    if len(statistics) >= 21:
+        ws,wf = (float(v)/world for v in statistics[19:21])
+        row.update(optimization_weighted_subtask_term=ws,optimization_weighted_fast_term=wf,
+            optimization_weighted_subtask_fraction=ws/(ws+wf) if ws+wf>0 else None,
+            optimization_weighted_fast_fraction=wf/(ws+wf) if ws+wf>0 else None)
+    row['optimization_loss_fraction_scope']='raw_unified_token_ce_not_weighted_objective'
     objective,token,subtask,fast,token_term,flow_term=[float(v)/world for v in statistics[6:12]]
     text_computed=bool(statistics[12]>0)
     row.update(optimization_scope='equal_microbatch_mean_then_ddp_rank_mean',
@@ -201,17 +231,23 @@ def validate(loss_model,indices,fx,packed,cfg,image_size,device,horizon,world,ra
     loss_model.eval()
     cfg=dict(cfg,_flow_stream='validation',_flow_update=0)
     micro=cfg['micro_batch'];block=micro*world
-    combined=torch.zeros(6,device=device,dtype=torch.float64)
+    combined=torch.zeros(12,device=device,dtype=torch.float64)
     for start in range(0,len(indices),block):
         full=indices[start:start+block];full+= [-1]*(block-len(full))
         chunk=full[rank*micro:(rank+1)*micro]
         b=make_batch(chunk,fx,packed,cfg,image_size,device,horizon,True)
         with torch.autocast('cuda',dtype=torch.bfloat16,enabled=device.type=='cuda'):
             _,_,statistics=loss_model(b,torch.ones(3,device=device),return_statistics=True)
-        combined+=statistics[:6]
+        combined[:6]+=statistics[:6]
+        combined[6:]+=statistics[13:19]
     if world>1:dist.all_reduce(combined)
     loss_model.train()
-    return diagnostic_metrics(combined[:3],combined[3:])
+    result = diagnostic_metrics(combined[:3],combined[3:6])
+    for index, name in enumerate(('subtask_key', 'subtask_template', 'fast_code')):
+        numerator, count = combined[6+2*index:8+2*index].tolist()
+        result[name+'_ce'] = numerator/count if count > 0 else None
+        result[name+'_token_count'] = count
+    return result
 
 
 def main():
@@ -248,7 +284,7 @@ def main():
     model,model_cfg=build_model(stage['preset'],args.smoke,device,cfg['pretrained'],
         torch.bfloat16 if cfg['dtype']=='bf16' else torch.float32,cfg['attn_math'],
         time_sampler=cfg['time_sampler'],time_beta_alpha=cfg['time_beta_alpha'],time_beta_beta=cfg['time_beta_beta'],
-        loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'])
+        loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'],text_loss=cfg.get('text_loss'))
     with_actions=model.action_loss_weight>0
     configure_trainable_parameters(model, stage['preset'])
     trainable=[p for p in model.parameters() if p.requires_grad]
@@ -262,6 +298,9 @@ def main():
         loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'])
     # Include model/normalization identity in the recovery contract, not just trainable tensors.
     metadata['model_config']=model_cfg
+    if 'text_loss' in cfg and prompts.subtask_mask_spec is not None:
+        metadata['subtask_mask_spec']=prompts.subtask_mask_spec.to_dict()
+        metadata['subtask_mask_fingerprint']=prompts.subtask_mask_spec.fingerprint
     metadata['normalization_sha256']=hashlib.sha256(json.dumps(json.loads((Path(cfg['cache'])/'samples.json').read_text())['normalization'],sort_keys=True).encode()).hexdigest()
     if args.stage=='stage2' and cfg['training_method'] in ('hybrid_insulated','two_stage'):
         receipt_path=Path(cfg['shared_stage1_root'])/f"seed-{cfg['seed']}"/'selected-stage1.json'
@@ -352,9 +391,11 @@ def main():
             if epoch_index==start_epoch and cursor<batch_cursor:continue
             opt.zero_grad(set_to_none=True)
             update+=1
+            from .text_loss import apply_text_schedule
+            apply_text_schedule(model,cfg.get('text_loss'),stage['preset'],update,total)
             lr=lr_at(update,total,stage['peak_lr'],cfg['warmup_fraction'],cfg['min_lr_ratio'])
             for group in opt.param_groups:group['lr']=lr
-            statistics=torch.zeros(13,device=device,dtype=torch.float64)
+            statistics=torch.zeros(21,device=device,dtype=torch.float64)
             for micro_index,chunk in enumerate(batches):
                 b=make_batch(chunk,fx,packed,dict(cfg,_flow_update=update),image_size,device,horizon,with_actions)
                 factors=torch.full((3,),1./len(batches),device=device)
@@ -375,6 +416,7 @@ def main():
                 row=dict(stage=args.stage,epoch=epoch,update=update,total_updates=total,lr=lr,
                     grad_norm=float(grad),text_loss_mode=model.text_loss_mode,
                     token_loss_weight=model.token_loss_weight,flow_loss_weight=model.action_loss_weight,
+                    subtask_loss_weight=model.hl_loss_weight,fast_loss_weight=model.fast_loss_weight,
                     **training_metrics(statistics,world))
                 with (out/'metrics.jsonl').open('a') as f:f.write(json.dumps(row)+'\n')
                 if update%10==0 or update%steps==0 or update==1:print(json.dumps(row),flush=True)
@@ -397,7 +439,7 @@ def main():
         if rank==0:
             with (out/'validation.jsonl').open('a') as f:f.write(json.dumps(meta)+'\n')
         eval_epochs=set(int(x) for x in (stage.get('eval_at_epochs') or []))
-        if args.stage=='stage1' and epoch in eval_epochs:
+        if args.stage=='stage1' and (epoch in eval_epochs or stage.get('keep_epoch_checkpoints',False)):
             save_deployment(model,out,meta,world,rank,cfg,model_cfg)
             if rank==0:
                 print(json.dumps(dict(status='STAGE1_EVAL',epoch=epoch,update=update,validation=val)),flush=True)
@@ -446,12 +488,10 @@ def main():
                         picked_val={metric: best_loss})
                     final_meta['update']=update
                     deployment=export_bundle(model.state_dict(), out/'final.deploy', cfg, model_cfg, final_meta, reserve)
-                    for _, ep, u, p in cand:
-                        if p.exists():
-                            shutil.rmtree(p)
+                    deleted=cleanup_stage1_candidates(cand,stage.get('keep_epoch_checkpoints',False))
                     print(json.dumps(dict(status='STAGE1_PICK_BEST', metric=metric, best_epoch=best_ep,
                         best_update=best_u, best_val=best_loss, kept=str(deployment),
-                        deleted=[ep for _,ep,_,_ in cand if ep!=best_ep])), flush=True)
+                        deleted=deleted,keep_epoch_checkpoints=stage.get('keep_epoch_checkpoints',False))), flush=True)
                 else:
                     deployment=export_bundle(model.state_dict(),(out/'final.deploy' if args.stage=='stage1'
                         else out/f'step-{update:08d}.deploy'),cfg,model_cfg,final_meta,reserve)

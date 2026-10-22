@@ -1,0 +1,26 @@
+{
+  "extends": "separate_split_linear.json",
+  "shared_stage1_root": "/home/ubuntu/2xPro6000/pi-subtask/work_dirs/loss_normalized_slots_fast10_3ep_stage1",
+  "output": "/home/ubuntu/2xPro6000/pi-subtask/work_dirs/loss_normalized_slots_fast10_3ep/seed-{seed}",
+  "stages": [
+    {
+      "name": "stage1",
+      "preset": "stage1_fast",
+      "epochs": 3,
+      "peak_lr": 0.0001,
+      "eval_at_epochs": [
+        1,
+        2,
+        3
+      ],
+      "pick_best_metric": "fast_ce",
+      "keep_epoch_checkpoints": true
+    },
+    {
+      "name": "stage2",
+      "preset": "hybrid_insulated",
+      "epochs": 2,
+      "peak_lr": 7.5e-05
+    }
+  ]
+}

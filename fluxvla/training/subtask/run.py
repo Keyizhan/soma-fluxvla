@@ -49,29 +49,37 @@ def preflight(cfg, require_gpu, verify_weights=False):
     return checks
 
 
-def checkpoint_storage_plan(cfg):
+def checkpoint_storage_plan(cfg, stop_after_stage=None):
     samples=json.loads((Path(cfg['cache'])/'samples.json').read_text())
     train=sum(r['split']=='train' for r in samples['records'])
     steps=math.ceil(train/cfg['global_batch'])
-    stage2=next(s for s in cfg['stages'] if s['name']=='stage2')
+    stages=cfg['stages']
+    if stop_after_stage is not None:
+        names=[s['name'] for s in stages]
+        if stop_after_stage not in names:raise ValueError('stop stage is absent from configuration')
+        stages=stages[:names.index(stop_after_stage)+1]
+    stage1=next((s for s in stages if s['name']=='stage1'),None)
+    stage2=next((s for s in stages if s['name']=='stage2'),None)
     interval=cfg['checkpoint']['save_every_steps']
-    total=steps*stage2['epochs']
+    total=steps*stage2['epochs'] if stage2 else 0
     points=list(range(interval,total+1,interval))
-    if not points or points[-1]!=total:points.append(total)
+    if total and (not points or points[-1]!=total):points.append(total)
     gib=1024**3
     model=int(7*gib)  # 6.737 GiB bf16 weights + tokenizer/contracts and margin
     full=int(21*gib)
     safety=int(cfg['checkpoint'].get('safety_reserve_gib',20)*gib)
-    peak=full+(1+len(points))*model+safety
+    epoch_bundles=stage1['epochs'] if stage1 and stage1.get('keep_epoch_checkpoints',False) else 0
+    peak=(full if stage2 else 0)+(1+epoch_bundles+len(points))*model+safety
     root=Path(cfg['output']);root.mkdir(parents=True,exist_ok=True)
     available=shutil.disk_usage(root).free
     fresh=not any(root.glob('stage*/latest.json'))
     plan=dict(train_anchors=train,optimizer_steps_per_epoch=steps,stage2_total_updates=total,
-        total_optimizer_updates=steps*sum(s['epochs'] for s in cfg['stages']),
-        extra_stage1_updates=steps*next((s['epochs'] for s in cfg['stages'] if s['name']=='stage1'),0),
+        total_optimizer_updates=steps*sum(s['epochs'] for s in stages),
+        extra_stage1_updates=steps*(stage1['epochs'] if stage1 else 0),
+        stop_after_stage=stop_after_stage,stage1_retained_epoch_bundles=epoch_bundles,
         stage2_save_steps=points,model_bundle_bound_bytes=model,full_resume_bound_bytes=full,
         peak_reserved_bytes=peak,available_bytes=available,fresh_run=fresh,
-        description='one final full snapshot + Stage1 final model + Stage2 saved models + safety')
+        description='active stages: final full snapshot (Stage2 only) + Stage1 final and retained epochs + Stage2 saved models + safety')
     write_json(root/'checkpoint-storage-plan.json',plan)
     if fresh and available<peak:
         raise OSError(f'training checkpoint peak needs {peak/gib:.2f} GiB, available {available/gib:.2f} GiB')
@@ -81,7 +89,10 @@ def checkpoint_storage_plan(cfg):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--config',required=True);p.add_argument('--check',action='store_true');p.add_argument('--warm-start-stage2',action='store_true',help='explicit fresh-optimizer continuation from latest model-only Stage2 snapshot')
+    p.add_argument('--stop-after-stage',choices=['stage1','stage2'],help='finish the selected stage and its receipt without starting later stages')
     a=p.parse_args();cfg=load_config(a.config)
+    if a.stop_after_stage and a.stop_after_stage not in [s['name'] for s in cfg['stages']]:
+        p.error('--stop-after-stage is absent from configured stages')
     from .common import validate_training_method
     validate_training_method(cfg)
     preflight(cfg,not a.check,verify_weights=not a.check)
@@ -93,7 +104,7 @@ def main():
     cache=Path(cfg['cache'])
     if not cache.exists():run(sys.executable,'-m','fluxvla.training.subtask.prepare','prepare','--config',a.config)
     run(sys.executable,'-m','fluxvla.training.subtask.prepare','verify','--config',a.config)
-    checkpoint_storage_plan(cfg)
+    checkpoint_storage_plan(cfg,a.stop_after_stage)
     out=Path(cfg['output']);out.mkdir(parents=True,exist_ok=True)
     contract=out/'run-config.json'
     if contract.exists() and json.loads(contract.read_text())!=cfg:
@@ -140,6 +151,10 @@ def main():
             if receipt.exists() and json.loads(receipt.read_text())!=selected:raise ValueError('shared stage1 selected weights changed')
             write_json(receipt,selected)
             write_json(out/'stage1-initialization.json',selected)
+        if stage['name']==a.stop_after_stage:
+            write_json(out/'STOPPED_AFTER_STAGE.json',dict(status='STAGE_COMPLETE',stage=stage['name'],deployment=str(previous),config_sha256=digest(a.config)))
+            print(json.dumps(dict(status='STOPPED_AFTER_STAGE',stage=stage['name'],deployment=str(previous))),flush=True)
+            return
 
     write_json(out/'COMPLETE.json',dict(status='COMPLETE',config_sha256=digest(a.config)))
 

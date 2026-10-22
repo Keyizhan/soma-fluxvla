@@ -44,7 +44,7 @@ def batch(counts_and_sums):
 def test_microbatch_optimization_and_pooled_metrics_have_distinct_scopes():
     model=AnalyticModel()
     loss=Loss(model,True)
-    statistics=torch.zeros(13,dtype=torch.float64)
+    statistics=torch.zeros(21,dtype=torch.float64)
     for values in ([1,3,2,3],[9,1,27,4]):
         objective,_,row=loss(batch(values),torch.full((3,),.5),return_statistics=True)
         objective.backward()

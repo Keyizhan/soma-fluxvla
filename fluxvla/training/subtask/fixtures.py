@@ -95,6 +95,9 @@ class Fixtures:
         return [i for i, r in enumerate(self.records) if r['split'] == split]
 
 def prepare(fx, prompts, state_dim):
+    from fluxvla.transforms.template_masks import TemplateMaskSpec
+    if not prompts.subtask_mask_spec.records and not prompts.subtask_mask_spec.templates:
+        prompts.subtask_mask_spec = TemplateMaskSpec.fit([fx.texts(i)[1] for i in fx.subset('train')])
     packed = []
     for i in range(len(fx)):
         overall, subtask = fx.texts(i)
@@ -129,19 +132,24 @@ def collate(items, indices, fx, image_size, device, with_actions, n_action_steps
 
 def build_model(preset, smoke, device, pretrained=None, dtype=torch.float32,
                 attn_math='bf16', time_sampler='beta', time_beta_alpha=1.5, time_beta_beta=1.0,
-                loss_objective='unified-token-ce-v1', joint_flow_weight=1.0):
+                loss_objective='unified-token-ce-v1', joint_flow_weight=1.0, text_loss=None):
     from fluxvla.training.presets.pi05_subtask_fast import PRESETS
     from .config import LOSS_OBJECTIVE
-    if loss_objective != LOSS_OBJECTIVE:
+    if loss_objective not in (LOSS_OBJECTIVE, 'gated-token-ce-v1'):
         raise ValueError('controlled model requires unified-token-ce-v1 loss_objective')
     if (isinstance(joint_flow_weight, bool) or not isinstance(joint_flow_weight, (int, float))
             or not 0 < joint_flow_weight < float('inf')):
         raise ValueError('joint_flow_weight must be finite and positive')
+    if (loss_objective == 'gated-token-ce-v1') != (text_loss is not None):
+        raise ValueError('gated objective and text_loss must be supplied together')
     cfg = copy.deepcopy(PRESETS[preset]['model'])
     cfg.update(text_loss_mode='unified_token', hl_loss_weight=0., fast_loss_weight=0.,
                token_loss_weight=0. if preset in ('action_expert', 'flow_only') else 1.)
     cfg['action_loss_weight'] = (joint_flow_weight if preset in ('hybrid', 'hybrid_insulated')
                                 else 0. if preset == 'stage1_fast' else 1.)
+    if text_loss is not None:
+        from .text_loss import model_loss_settings
+        cfg.update(model_loss_settings(text_loss, preset))
     cfg['pretrained_name_or_path'] = None if smoke else pretrained
     cfg['attn_math'] = attn_math
     cfg.update(time_sampler=time_sampler, time_beta_alpha=time_beta_alpha, time_beta_beta=time_beta_beta)

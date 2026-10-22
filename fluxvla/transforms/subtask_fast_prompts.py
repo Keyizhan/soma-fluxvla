@@ -17,6 +17,7 @@ the mask bookkeeping, so it needs neither scipy nor remote-code transformers.
 import numpy as np
 
 from fluxvla.engines import TRANSFORMS, build_tokenizer_from_cfg
+from fluxvla.transforms.template_masks import TemplateMaskSpec, token_key_mask
 
 REFERENCE = 'Ke-Wang1017/openpi_subtask@385d0e8330397ecfa29e9b675042b424c4d5386c'
 PUNCTUATION = set('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~')
@@ -49,7 +50,14 @@ class PrepareSubtaskFastPrompts:
     def __init__(self, tokenizer, max_len=256, state_dim=32, state_bins=256,
                  model_vocab_size=None, fast_vocab_size=2048, fast_skip_tokens=128,
                  low_level_sees_task=True, all_causal=True, low_level_action_tail='\nAction: ', low_level_eos=False,
-                 low_level_segmented=False, low_level_prompt_format="legacy"):
+                 low_level_segmented=False, low_level_prompt_format="legacy",
+                 subtask_mask_spec=None, subtask_templates=None):
+        self.subtask_mask_spec = (TemplateMaskSpec.from_dict(subtask_mask_spec)
+                                  if isinstance(subtask_mask_spec, dict)
+                                  else subtask_mask_spec or TemplateMaskSpec())
+        if subtask_templates:
+            self.subtask_mask_spec = TemplateMaskSpec(
+                self.subtask_mask_spec.records, subtask_templates)
         if low_level_prompt_format not in ('legacy', 'state_subtask'):
             raise ValueError('unsupported low_level_prompt_format')
         if low_level_prompt_format == 'state_subtask' and (
@@ -170,6 +178,12 @@ class PrepareSubtaskFastPrompts:
             raise ValueError('padding must carry no masks')
         if np.any(sub & act):
             raise ValueError('subtask and action regions must be disjoint')
+        if 'subtask_key_mask' in packed:
+            key, template = packed['subtask_key_mask'], packed['subtask_template_mask']
+            if np.any(key & template) or not np.array_equal(key | template, sub):
+                raise ValueError('key/template masks must partition the subtask region')
+        if 'action_code_mask' in packed and np.any(packed['action_code_mask'] & ~act):
+            raise ValueError('FAST code mask must be contained in action region')
         if np.any((sub | act) & ~loss):
             raise ValueError('region masks must be subsets of loss_mask')
         if np.any(loss & (~valid | ~ar)):
@@ -184,7 +198,8 @@ class PrepareSubtaskFastPrompts:
         condition = (f'Task: {clean_reference(overall_task)}; '
                      f'State: {self.state_text(states)}; Subtask: ')
         prefix = [self.bos_id] + self._encode(condition)
-        subtask_segment = self._encode(clean_reference(subtask) + ';')
+        subtask_text = clean_reference(subtask) + ';'
+        subtask_segment = self._encode(subtask_text)
         segments = [(prefix, False, 'none'), (subtask_segment, True, 'subtask')]
         breakdown = dict(prefix=len(prefix), subtask=len(subtask_segment), action=0)
         if fast_token_ids is not None:
@@ -199,7 +214,20 @@ class PrepareSubtaskFastPrompts:
             segments.append((tail, True, 'subtask'))
             breakdown['subtask'] += len(tail)
         breakdown['total'] = sum(breakdown[k] for k in ('prefix', 'subtask', 'action'))
-        return self._finalise(segments, breakdown)
+        packed = self._finalise(segments, breakdown)
+        key = np.zeros(self.max_len, dtype=bool)
+        start = len(prefix)
+        key[start:start + len(subtask_segment)] = token_key_mask(
+            self.tokenizer, subtask_text, subtask_segment, self.subtask_mask_spec)
+        packed['subtask_key_mask'] = key
+        packed['subtask_template_mask'] = packed['subtask_region_mask'] & ~key
+        codes = np.zeros(self.max_len, dtype=bool)
+        if fast_token_ids is not None:
+            action_start = start + len(subtask_segment) + len(self._encode('\nAction: '))
+            codes[action_start:action_start + len(np.asarray(fast_token_ids).reshape(-1))] = True
+        packed['action_code_mask'] = codes
+        self.check(packed)
+        return packed
 
     def stop_token_ids(self):
         # Ids of the "\nAction: " delimiter that follows the subtask in fast mode.

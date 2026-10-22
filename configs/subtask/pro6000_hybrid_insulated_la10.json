@@ -1,0 +1,11 @@
+{
+  "extends": "fabric106_hybrid_insulated.json",
+  "incoming": "/home/ubuntu/2xPro6000/pi-subtask/dataset/dataset_goal_text_v1",
+  "pretrained": "/home/ubuntu/e-ai-shared/soma-training/fluxvla_towel168_corrected_continue_20261014/models/pi05_base",
+  "tokenizer": "/home/ubuntu/e-ai-shared/soma-training/fluxvla_towel168_corrected_continue_20261014/models/pi05_base",
+  "expected_gpus": 2,
+  "micro_batch": 4,
+  "cache": "/home/ubuntu/2xPro6000/pi-subtask/cache/goal_text_v1_paper_prefix",
+  "shared_stage1_root": "/home/ubuntu/2xPro6000/pi-subtask/work_dirs/shared_goal_text_v1_paper_prefix_token_ce_v1",
+  "output": "/home/ubuntu/2xPro6000/pi-subtask/work_dirs/hybrid_insulated_la10_20261022/seed-{seed}"
+}

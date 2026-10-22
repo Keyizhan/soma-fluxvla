@@ -119,7 +119,7 @@ def ddp_worker(rank, directory):
         batch = unequal_batch()
         local_rows = [(0, True), (1, True)] if rank == 0 else [(1, True), (2, False)]
         wrapped = DistributedDataParallel(Loss(model, False))
-        statistics = torch.zeros(13, dtype=torch.float64)
+        statistics = torch.zeros(21, dtype=torch.float64)
         for micro_index, (row, real) in enumerate(local_rows):
             with wrapped.no_sync() if micro_index == 0 else nullcontext():
                 loss, _, measured = wrapped(select_row(batch, row, real), torch.full((3,), .5), return_statistics=True)

@@ -35,6 +35,8 @@ def global_weighted_mean(total, count):
 class PI05Subtask(PI05FlowMatching):
     def __init__(self, hl_loss_weight=1.0, action_loss_weight=1.0, fast_loss_weight=1.0,
                  text_loss_mode='separate', token_loss_weight=0.0,
+                 split_subtask_loss=False, subtask_key_weight=1., subtask_template_weight=.1,
+                 normalize_text_weights=False,
                  fast_vocab_size=None, fast_skip_tokens=128, exact_beta_time=True,
                  rope_precision='jax', attn_math='fp32', warn_on_bf16_cache=True,
                  low_level_prefix_source='generation', low_level_task_independent=False,
@@ -57,6 +59,13 @@ class PI05Subtask(PI05FlowMatching):
             raise ValueError('unified_token requires zero separate hl/fast loss weights')
         if text_loss_mode == 'separate' and token_loss_weight != 0:
             raise ValueError('separate text loss cannot use token_loss_weight')
+        for value in (subtask_key_weight, subtask_template_weight):
+            if not math.isfinite(value) or value < 0:
+                raise ValueError('subtask split weights must be finite and nonnegative')
+        self.split_subtask_loss = split_subtask_loss
+        self.normalize_text_weights = normalize_text_weights
+        self.subtask_key_weight = subtask_key_weight
+        self.subtask_template_weight = subtask_template_weight
         self.text_loss_mode = text_loss_mode
         self.token_loss_weight = token_loss_weight
         # hl = subtask CE, fast = FAST action-token CE, action = flow-matching MSE.
@@ -165,7 +174,8 @@ class PI05Subtask(PI05FlowMatching):
     def forward_high_level(self, images, hl_input_ids, hl_valid_mask, hl_ar_mask,
                            hl_labels, img_masks, has_hl=None, sample_weight=None,
                            return_logits=False, hl_subtask_region_mask=None,
-                           hl_action_region_mask=None):
+                           hl_action_region_mask=None, hl_subtask_key_mask=None,
+                           hl_subtask_template_mask=None, hl_action_code_mask=None):
         hidden, _, offset = self.high_level_hidden(
             images, hl_input_ids, hl_valid_mask, hl_ar_mask, img_masks)
         if hl_labels.shape != hl_input_ids.shape:
@@ -225,14 +235,51 @@ class PI05Subtask(PI05FlowMatching):
                       target_count=subtask_count.detach(),
                       loss_action_ce=None,
                       action_target_count=torch.zeros((), device=loss_subtask.device))
+        if (hl_subtask_key_mask is None) != (hl_subtask_template_mask is None):
+            raise ValueError('provide both subtask split masks')
+        if self.split_subtask_loss and hl_subtask_key_mask is None:
+            raise ValueError('split subtask objective requires key/template masks')
+        if hl_subtask_key_mask is not None:
+            region = supervised if hl_subtask_region_mask is None else hl_subtask_region_mask.bool()
+            key, template = hl_subtask_key_mask.bool(), hl_subtask_template_mask.bool()
+            if key.shape != region.shape or template.shape != region.shape:
+                raise ValueError('split masks must align to input tokens')
+            if torch.any(key & template) or torch.any((key | template) != region):
+                raise ValueError('key/template masks must partition subtask region')
+            for name, mask in (('subtask_key', key), ('subtask_template', template)):
+                selected = mask[:, 1:][target_mask]
+                subtotal = (nll[selected] * weights[selected]).sum()
+                count = weights[selected].sum()
+                output[name+'_nll_sum'] = subtotal
+                output[name+'_count'] = count.detach()
+                output[name+'_ce'] = self._loss_mean(subtotal, count)
+        if hl_action_code_mask is not None:
+            if hl_action_code_mask.shape != hl_input_ids.shape or hl_action_region_mask is None or torch.any(hl_action_code_mask.bool() & ~hl_action_region_mask.bool()):
+                raise ValueError('FAST code mask must be within action region')
+            selected = hl_action_code_mask.bool()[:, 1:][target_mask]
+            subtotal = (nll[selected] * weights[selected]).sum()
+            count = weights[selected].sum()
+            output.update(fast_code_nll_sum=subtotal, fast_code_count=count.detach(), fast_code_ce=self._loss_mean(subtotal,count))
+        output['loss_subtask_objective'] = loss_subtask
+        output['loss_token_objective'] = loss_token
+        if self.split_subtask_loss:
+            output['loss_subtask_objective'] = self.subtask_key_weight*output['subtask_key_ce'] + self.subtask_template_weight*output['subtask_template_ce']
+            weighted_sum = self.subtask_key_weight*output['subtask_key_nll_sum'] + self.subtask_template_weight*output['subtask_template_nll_sum']
+            denominator = token_count
+            if self.normalize_text_weights:
+                denominator = self.subtask_key_weight*output['subtask_key_count'] + self.subtask_template_weight*output['subtask_template_count'] + fast_count
+            output['loss_token_objective'] = self._loss_mean(weighted_sum + fast_sum, denominator)
+            output['token_fast_objective'] = self._loss_mean(fast_sum, denominator)
         if return_logits:
             output['logits'] = self.project_text(hidden[:, offset:]).float()
         if action_nll is not None:
             loss_action_ce = self._loss_mean(fast_sum, fast_count)
-            output.update(loss_action_ce=loss_action_ce, loss=loss_subtask + loss_action_ce,
+            output.update(loss_action_ce=loss_action_ce, loss=output['loss_subtask_objective'] + loss_action_ce,
                           action_target_count=fast_count.detach())
+        if action_nll is None:
+            output['loss'] = output['loss_subtask_objective']
         if self.text_loss_mode == 'unified_token':
-            output['loss'] = loss_token
+            output['loss'] = output['loss_token_objective']
         return output
 
     def forward_low_level(self, images, states, ll_input_ids, ll_valid_mask, actions,
@@ -289,23 +336,25 @@ class PI05Subtask(PI05FlowMatching):
     def forward(self, images, states, hl_input_ids, hl_valid_mask, hl_ar_mask, hl_labels,
                 ll_input_ids, ll_valid_mask, actions, img_masks, action_masks=None,
                 has_hl=None, has_action=None, sample_weight=None, noise=None, time=None,
-                hl_subtask_region_mask=None, hl_action_region_mask=None, **kwargs):
+                hl_subtask_region_mask=None, hl_action_region_mask=None,
+                hl_subtask_key_mask=None, hl_subtask_template_mask=None, hl_action_code_mask=None, **kwargs):
         high = self.forward_high_level(
             images, hl_input_ids, hl_valid_mask, hl_ar_mask, hl_labels, img_masks,
             has_hl=has_hl, sample_weight=sample_weight,
             hl_subtask_region_mask=hl_subtask_region_mask,
-            hl_action_region_mask=hl_action_region_mask)
+            hl_action_region_mask=hl_action_region_mask, hl_subtask_key_mask=hl_subtask_key_mask,
+            hl_subtask_template_mask=hl_subtask_template_mask, hl_action_code_mask=hl_action_code_mask)
         low = self.forward_low_level(
             images, states, ll_input_ids, ll_valid_mask, actions, img_masks,
             action_masks=action_masks, has_action=has_action, sample_weight=sample_weight,
             noise=noise, time=time)
         loss_fast = high['loss_action_ce']
         if self.text_loss_mode == 'unified_token':
-            loss = self.token_loss_weight * high['loss_token'] + self.action_loss_weight * low['loss']
+            loss = self.token_loss_weight * high['loss_token_objective'] + self.action_loss_weight * low['loss']
             subtask_metric = high['loss_subtask']
             fast_metric = loss_fast
         else:
-            loss = self.hl_loss_weight * high['loss_subtask'] + self.action_loss_weight * low['loss']
+            loss = self.hl_loss_weight * high['loss_subtask_objective'] + self.action_loss_weight * low['loss']
             if loss_fast is not None:
                 loss = loss + self.fast_loss_weight * loss_fast
             subtask_metric = self.hl_loss_weight * high['loss_subtask']
