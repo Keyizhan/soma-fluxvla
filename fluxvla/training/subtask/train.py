@@ -95,9 +95,14 @@ class Loss(torch.nn.Module):
         if not self.metrics and not text_enabled:
             raw=[torch.zeros((),device=b['images'].device)]*2
         else:
+            bbox_args = {}
+            if getattr(m, 'bbox', None) is not None:
+                bbox_args = dict(hl_bbox_groups={name: b['high_bbox_'+name+'_groups']
+                    for name in ('type','coordinate','format')}, bbox_denominators=b.get('bbox_denominators'))
             high=m.forward_high_level(b['images'],b['high_input_ids'],b['high_valid_mask'],b['high_ar_mask'],
                 b['high_labels'],b['img_masks'],has_hl=b['real'],
                 hl_subtask_region_mask=b['high_subtask_region_mask'],hl_action_region_mask=b['high_action_region_mask'],
+                **bbox_args,
                 **{k: b['high_'+k[3:]] for k in ('hl_subtask_key_mask','hl_subtask_template_mask','hl_action_code_mask') if 'high_'+k[3:] in b})
             raw=[high['loss_subtask'],high['loss_action_ce']]
             counts[0]=high['target_count'];counts[1]=high['action_target_count']
@@ -133,7 +138,10 @@ class Loss(torch.nn.Module):
             token_term=(high.get('loss_subtask_objective',raw[0]) if high is not None else raw[0])*m.hl_loss_weight*factors[0]+raw[1]*m.fast_loss_weight*factors[1]
         weighted_fast = (high.get('token_fast_objective', contributions[1]) if high is not None else contributions[1])*m.token_loss_weight*factors[0] if unified else raw[1]*m.fast_loss_weight*factors[1]
         weighted_subtask = token_term-weighted_fast
-        total=token_term+flow_term
+        bbox_term = token_term*0
+        if high is not None and text_enabled and getattr(m,'bbox',None) is not None:
+            bbox_term = high['loss_bbox'] * (1. if 'bbox_denominators' in b else factors[0])
+        total=token_term+flow_term+bbox_term
         result=(total,torch.stack([v.detach() for v in raw]))
         if return_statistics:
             # Sufficient statistics are pooled by count; optimization entries already
@@ -147,6 +155,10 @@ class Loss(torch.nn.Module):
                 for suffix in ('_nll_sum', '_count'):
                     extra.append(high.get(name+suffix, counts.new_zeros(())) if high is not None else counts.new_zeros(()))
             statistics = torch.cat([statistics, torch.stack(extra+[weighted_subtask,weighted_fast]).detach().double()])
+            if getattr(m, 'bbox', None) is not None:
+                bbox_stats = [high['bbox_'+name+suffix] if high is not None else counts.new_zeros(())
+                              for name in ('type','coordinate','format') for suffix in ('_sum','_count')]
+                statistics = torch.cat([statistics, torch.stack(bbox_stats+[bbox_term]).detach().double()])
             return (*result,statistics)
         return (*result,counts) if return_counts else result
 
@@ -185,10 +197,17 @@ def training_metrics(statistics,world=1):
         row.update(optimization_weighted_subtask_term=ws,optimization_weighted_fast_term=wf,
             optimization_weighted_subtask_fraction=ws/(ws+wf) if ws+wf>0 else None,
             optimization_weighted_fast_fraction=wf/(ws+wf) if ws+wf>0 else None)
+    if len(statistics) >= 28:
+        for i, name in enumerate(('type','coordinate','format')):
+            total, count = statistics[21+2*i:23+2*i]
+            row['bbox_'+name+'_ce'] = total/count if count else None
+            row['bbox_'+name+'_count'] = count
+        row['optimization_weighted_bbox_term'] = statistics[27]/world
+        row['bbox_optimization_scope'] = 'global_valid_goal_mean_over_optimizer_update'
     row['optimization_loss_fraction_scope']='raw_unified_token_ce_not_weighted_objective'
     objective,token,subtask,fast,token_term,flow_term=[float(v)/world for v in statistics[6:12]]
     text_computed=bool(statistics[12]>0)
-    row.update(optimization_scope='equal_microbatch_mean_then_ddp_rank_mean',
+    row.update(optimization_scope=('legacy_microbatch_mean_plus_global_update_bbox_mean' if len(statistics)>=28 else 'equal_microbatch_mean_then_ddp_rank_mean'),
         optimization_loss=objective,
         optimization_token_ce=token if text_computed else None,
         optimization_token_subtask_contribution=subtask if text_computed else None,
@@ -231,7 +250,8 @@ def validate(loss_model,indices,fx,packed,cfg,image_size,device,horizon,world,ra
     loss_model.eval()
     cfg=dict(cfg,_flow_stream='validation',_flow_update=0)
     micro=cfg['micro_batch'];block=micro*world
-    combined=torch.zeros(12,device=device,dtype=torch.float64)
+    bbox_enabled = getattr(loss_model.model, 'bbox', None) is not None
+    combined=torch.zeros(18 if bbox_enabled else 12,device=device,dtype=torch.float64)
     for start in range(0,len(indices),block):
         full=indices[start:start+block];full+= [-1]*(block-len(full))
         chunk=full[rank*micro:(rank+1)*micro]
@@ -239,7 +259,9 @@ def validate(loss_model,indices,fx,packed,cfg,image_size,device,horizon,world,ra
         with torch.autocast('cuda',dtype=torch.bfloat16,enabled=device.type=='cuda'):
             _,_,statistics=loss_model(b,torch.ones(3,device=device),return_statistics=True)
         combined[:6]+=statistics[:6]
-        combined[6:]+=statistics[13:19]
+        combined[6:12]+=statistics[13:19]
+        if bbox_enabled:
+            combined[12:18]+=statistics[21:27]
     if world>1:dist.all_reduce(combined)
     loss_model.train()
     result = diagnostic_metrics(combined[:3],combined[3:6])
@@ -247,6 +269,11 @@ def validate(loss_model,indices,fx,packed,cfg,image_size,device,horizon,world,ra
         numerator, count = combined[6+2*index:8+2*index].tolist()
         result[name+'_ce'] = numerator/count if count > 0 else None
         result[name+'_token_count'] = count
+    if bbox_enabled:
+        for i, name in enumerate(('type','coordinate','format')):
+            total, count = combined[12+2*i:14+2*i].tolist()
+            result['bbox_'+name+'_ce'] = total/count if count else None
+            result['bbox_'+name+'_count'] = count
     return result
 
 
@@ -284,7 +311,7 @@ def main():
     model,model_cfg=build_model(stage['preset'],args.smoke,device,cfg['pretrained'],
         torch.bfloat16 if cfg['dtype']=='bf16' else torch.float32,cfg['attn_math'],
         time_sampler=cfg['time_sampler'],time_beta_alpha=cfg['time_beta_alpha'],time_beta_beta=cfg['time_beta_beta'],
-        loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'],text_loss=cfg.get('text_loss'))
+        loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'],text_loss=cfg.get('text_loss'),bbox=cfg.get('bbox'))
     with_actions=model.action_loss_weight>0
     configure_trainable_parameters(model, stage['preset'])
     trainable=[p for p in model.parameters() if p.requires_grad]
@@ -395,9 +422,16 @@ def main():
             apply_text_schedule(model,cfg.get('text_loss'),stage['preset'],update,total)
             lr=lr_at(update,total,stage['peak_lr'],cfg['warmup_fraction'],cfg['min_lr_ratio'])
             for group in opt.param_groups:group['lr']=lr
-            statistics=torch.zeros(21,device=device,dtype=torch.float64)
+            bbox_enabled = getattr(model, 'bbox', None) is not None
+            bbox_denominators = None
+            if bbox_enabled:
+                from fluxvla.models.vlas.bbox_loss import update_denominators
+                bbox_denominators = update_denominators(packed, batches, device)
+            statistics=torch.zeros(28 if bbox_enabled else 21,device=device,dtype=torch.float64)
             for micro_index,chunk in enumerate(batches):
                 b=make_batch(chunk,fx,packed,dict(cfg,_flow_update=update),image_size,device,horizon,with_actions)
+                if bbox_denominators is not None:
+                    b['bbox_denominators'] = bbox_denominators
                 factors=torch.full((3,),1./len(batches),device=device)
                 sync=wrapped.no_sync() if world>1 and micro_index<len(batches)-1 else nullcontext()
                 with sync:

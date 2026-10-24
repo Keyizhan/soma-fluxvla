@@ -36,7 +36,7 @@ class PI05Subtask(PI05FlowMatching):
     def __init__(self, hl_loss_weight=1.0, action_loss_weight=1.0, fast_loss_weight=1.0,
                  text_loss_mode='separate', token_loss_weight=0.0,
                  split_subtask_loss=False, subtask_key_weight=1., subtask_template_weight=.1,
-                 normalize_text_weights=False,
+                 normalize_text_weights=False, bbox=None,
                  fast_vocab_size=None, fast_skip_tokens=128, exact_beta_time=True,
                  rope_precision='jax', attn_math='fp32', warn_on_bf16_cache=True,
                  low_level_prefix_source='generation', low_level_task_independent=False,
@@ -47,6 +47,8 @@ class PI05Subtask(PI05FlowMatching):
         if loss_reduction not in ("local", "global"):
             raise ValueError("unsupported loss reduction")
         self.loss_reduction = loss_reduction
+        from fluxvla.transforms.bbox_grounding import resolve_bbox
+        self.bbox = None if bbox is None else resolve_bbox(bbox)
         if text_loss_mode not in ('separate', 'unified_token'):
             raise ValueError('unsupported text_loss_mode')
         for name, value in (('hl_loss_weight', hl_loss_weight),
@@ -175,12 +177,26 @@ class PI05Subtask(PI05FlowMatching):
                            hl_labels, img_masks, has_hl=None, sample_weight=None,
                            return_logits=False, hl_subtask_region_mask=None,
                            hl_action_region_mask=None, hl_subtask_key_mask=None,
-                           hl_subtask_template_mask=None, hl_action_code_mask=None):
+                           hl_subtask_template_mask=None, hl_action_code_mask=None, hl_bbox_groups=None, bbox_denominators=None):
         hidden, _, offset = self.high_level_hidden(
             images, hl_input_ids, hl_valid_mask, hl_ar_mask, img_masks)
         if hl_labels.shape != hl_input_ids.shape:
             raise ValueError('Labels must be aligned to text positions')
         supervised = hl_labels != -100
+        bbox_region = torch.zeros_like(supervised)
+        if (self.bbox is None) != (hl_bbox_groups is None):
+            raise ValueError('bbox model and supervision contract disagree')
+        if hl_bbox_groups is not None:
+            from fluxvla.transforms.bbox_grounding import PARTS
+            if set(hl_bbox_groups) != set(PARTS) or hl_subtask_region_mask is None or hl_action_region_mask is None:
+                raise ValueError('bbox requires all groups and explicit text regions')
+            for groups in hl_bbox_groups.values():
+                if groups.shape != supervised.shape or groups.dtype != torch.int64 or torch.any(groups < -1):
+                    raise ValueError('invalid bbox group layout')
+                region = groups >= 0
+                if torch.any(region & (~supervised | bbox_region | hl_subtask_region_mask.bool() | hl_action_region_mask.bool())):
+                    raise ValueError('bbox regions must be disjoint supervised targets')
+                bbox_region |= region
         if torch.any(supervised & (~hl_valid_mask.bool() | ~hl_ar_mask.bool())):
             raise ValueError('Targets must be valid causal text tokens')
         if supervised[:, 0].any():
@@ -196,8 +212,8 @@ class PI05Subtask(PI05FlowMatching):
                     raise ValueError(f'{name} region must be valid causal targets')
             if torch.any(hl_subtask_region_mask.bool() & hl_action_region_mask.bool()):
                 raise ValueError('Subtask and action regions must be disjoint')
-            if self.text_loss_mode == 'unified_token' and torch.any(
-                    (hl_subtask_region_mask.bool() | hl_action_region_mask.bool()) != supervised):
+            if (self.text_loss_mode == 'unified_token' or hl_bbox_groups is not None) and torch.any(
+                    (hl_subtask_region_mask.bool() | hl_action_region_mask.bool() | bbox_region) != supervised):
                 raise ValueError('unified_token regions must cover exactly all supervised targets')
         targets = hl_labels[:, 1:]
         target_mask = targets != -100
@@ -235,6 +251,12 @@ class PI05Subtask(PI05FlowMatching):
                       target_count=subtask_count.detach(),
                       loss_action_ce=None,
                       action_target_count=torch.zeros((), device=loss_subtask.device))
+        if hl_bbox_groups is not None:
+            from .bbox_loss import bbox_statistics
+            output.update(bbox_statistics(nll, target_mask, hl_bbox_groups, sample_weight, bbox_denominators))
+            output['loss_bbox'] = self.bbox['weight'] * sum(
+                self.bbox[name+'_weight'] * output['bbox_'+name+'_ce']
+                for name in ('type', 'coordinate', 'format'))
         if (hl_subtask_key_mask is None) != (hl_subtask_template_mask is None):
             raise ValueError('provide both subtask split masks')
         if self.split_subtask_loss and hl_subtask_key_mask is None:
@@ -337,13 +359,13 @@ class PI05Subtask(PI05FlowMatching):
                 ll_input_ids, ll_valid_mask, actions, img_masks, action_masks=None,
                 has_hl=None, has_action=None, sample_weight=None, noise=None, time=None,
                 hl_subtask_region_mask=None, hl_action_region_mask=None,
-                hl_subtask_key_mask=None, hl_subtask_template_mask=None, hl_action_code_mask=None, **kwargs):
+                hl_subtask_key_mask=None, hl_subtask_template_mask=None, hl_action_code_mask=None, hl_bbox_groups=None, **kwargs):
         high = self.forward_high_level(
             images, hl_input_ids, hl_valid_mask, hl_ar_mask, hl_labels, img_masks,
             has_hl=has_hl, sample_weight=sample_weight,
             hl_subtask_region_mask=hl_subtask_region_mask,
             hl_action_region_mask=hl_action_region_mask, hl_subtask_key_mask=hl_subtask_key_mask,
-            hl_subtask_template_mask=hl_subtask_template_mask, hl_action_code_mask=hl_action_code_mask)
+            hl_subtask_template_mask=hl_subtask_template_mask, hl_action_code_mask=hl_action_code_mask, hl_bbox_groups=hl_bbox_groups)
         low = self.forward_low_level(
             images, states, ll_input_ids, ll_valid_mask, actions, img_masks,
             action_masks=action_masks, has_action=has_action, sample_weight=sample_weight,
@@ -359,6 +381,8 @@ class PI05Subtask(PI05FlowMatching):
                 loss = loss + self.fast_loss_weight * loss_fast
             subtask_metric = self.hl_loss_weight * high['loss_subtask']
             fast_metric = None if loss_fast is None else self.fast_loss_weight * loss_fast
+        if self.bbox is not None and (self.token_loss_weight or self.hl_loss_weight or self.fast_loss_weight):
+            loss = loss + high['loss_bbox']
         return dict(loss=loss,
                     loss_subtask=subtask_metric.detach(), loss_hl=subtask_metric.detach(),
                     loss_fast=None if fast_metric is None else fast_metric.detach(),

@@ -7,3 +7,4 @@ from .transform_prompts import ProcessPrompts
 from .transform_images import ResizeImages, SimpleNormalizeImages
 from .subtask_prompts import PrepareSubtaskPrompts
 from .subtask_fast_prompts import PrepareSubtaskFastPrompts
+from .subtask_bbox_prompts import PrepareSubtaskBboxPrompts

@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 from .preprocessing import normalize_state, resize_rgb
+from fluxvla.transforms.bbox_grounding import parse_grounded, semantic_key
 from .subtask_hold import SubtaskHold
 from .subtask_stability import SubtaskStability
 from .text import cut_at_action_sentinel, subtask_for_action_prompt
@@ -67,6 +68,8 @@ class SubtaskPolicy:
         self.model = model.eval()
         self.prompts = prompts
         self.config = config or InferenceConfig()
+        if hasattr(prompts, 'grounding_contract') and getattr(model, 'bbox', None) is None:
+            raise ValueError('grounded inference requires bbox model configuration')
         self.camera_keys = tuple(camera_keys)
         if len(self.camera_keys) != 3 or len(set(self.camera_keys)) != 3:
             raise ValueError("three unique camera keys are required")
@@ -111,7 +114,8 @@ class SubtaskPolicy:
         c = self.config
         self.hold = SubtaskHold(c.subtask_update_interval_s)
         self.stability = SubtaskStability(c.subtask_switch_confirmations,
-                                          c.subtask_switch_reset_after_s)
+                                          c.subtask_switch_reset_after_s,
+                                          **(dict(key_fn=semantic_key, refresh_same=True) if hasattr(self.prompts, 'grounding_contract') else {}))
 
     @property
     def device(self):
@@ -128,7 +132,7 @@ class SubtaskPolicy:
         root = Path(path).expanduser().resolve()
         manifest = verify_bundle_files(root)
         contract = json.loads((root / "inference_contract.json").read_text())
-        cfg = config or InferenceConfig()
+        cfg = config or InferenceConfig(max_new_tokens=256 if contract.get('bbox') else 64)
         validate_conditioning(contract, cfg, allow_legacy_contract=allow_legacy_contract)
         native = json.loads((root / "model_config.json").read_text())
         tag = contract.get('prompt_contract')
@@ -171,7 +175,17 @@ class SubtaskPolicy:
         model.to(device=device, dtype=dtype).eval()
         tokenizer = build_tokenizer_from_cfg(
             dict(type="PretrainedTokenizer", model_path=str(root / "tokenizer")))
-        prompts = PrepareSubtaskFastPrompts(
+        prompt_class = PrepareSubtaskFastPrompts
+        if contract.get('bbox') != native.get('bbox'):
+            raise ValueError('bbox deployment/model contract mismatch')
+        if contract.get('bbox') is not None:
+            from fluxvla.transforms.bbox_grounding import resolve_bbox
+            from fluxvla.transforms.subtask_bbox_prompts import PrepareSubtaskBboxPrompts
+            resolve_bbox(contract['bbox'])
+            if contract.get('prompt_transform') != 'PrepareSubtaskBboxPrompts':
+                raise ValueError('bbox deployment requires grounded prompt transform')
+            prompt_class = PrepareSubtaskBboxPrompts
+        prompts = prompt_class(
             tokenizer, max_len=contract["max_prompt_length"], state_dim=14,
             model_vocab_size=native["llm_backbone"]["vocab_size"],
             fast_vocab_size=native["fast_vocab_size"], fast_skip_tokens=native["fast_skip_tokens"],
@@ -229,12 +243,14 @@ class SubtaskPolicy:
                     images, ids, valid, masks, eos_token_id=self.prompts.eos_id,
                     pad_token_id=self.prompts.pad_id, max_new_tokens=c.max_new_tokens,
                     use_cache=c.use_text_cache, ar_mask=ar,
-                    return_cache=c.prefix_source == "generation", stop_token_ids=None)
+                    return_cache=c.prefix_source == "generation", stop_token_ids=self.prompts.stop_token_ids() if hasattr(self.prompts, "grounding_contract") else None)
                 token_ids = generated["token_ids"][0, :int(generated["lengths"][0])].tolist()
                 raw_text = self.prompts.decode(token_ids)
                 candidate = cut_at_action_sentinel(raw_text)
                 if not candidate:
                     raise ValueError("empty generated subtask")
+                if hasattr(self.prompts, 'grounding_contract'):
+                    parse_grounded(candidate)
                 record = dict(subtask=candidate, raw_text=raw_text, token_ids=token_ids,
                               finished=bool(generated["finished"][0]))
             else:
@@ -244,7 +260,7 @@ class SubtaskPolicy:
             decision = self.stability.propose(overall, candidate, started, fresh=refreshed)
             action_text, prefix_cache = None, None
             if c.prefix_source == "text":
-                action_text = subtask_for_action_prompt(decision.active)
+                action_text = decision.active if hasattr(self.prompts, 'grounding_contract') else subtask_for_action_prompt(decision.active)
                 low = self.prompts.low_level(action_text, bins, overall)
                 low_ids, low_valid = tensor(low["input_ids"]), tensor(low["valid_mask"])
             else:
@@ -290,7 +306,8 @@ class SubtaskPolicy:
                 generated_token_ids=token_ids, raw_generation=raw_text,
                 generation_tokens=len(token_ids) if refreshed else 0,
                 source_generation_tokens=len(token_ids), max_new_tokens=c.max_new_tokens,
-                stop_at_action_sentinel=False, text_cache=c.use_text_cache,
+                grounding=(parse_grounded(decision.active) if hasattr(self.prompts, 'grounding_contract') else None),
+                stop_at_action_sentinel=hasattr(self.prompts, 'grounding_contract'), text_cache=c.use_text_cache,
                 num_denoise_steps=c.num_denoise_steps, attention_math=self.model.attn_math,
                 text_seconds=text_seconds, total_seconds=time.perf_counter()-started,
                 legacy_contract_override=getattr(self, "legacy_contract_override", False),

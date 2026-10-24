@@ -14,6 +14,8 @@ from fluxvla.engines import build_tokenizer_from_cfg
 def main():
     p=argparse.ArgumentParser();p.add_argument('--config',required=True)
     p.add_argument('--bundle',required=True);p.add_argument('--device',default='cuda')
+    p.add_argument('--bbox-generation-limit',type=int,default=0,help='free-running validation samples; 0 disables')
+    p.add_argument('--bbox-max-new-tokens',type=int,default=256)
     a=p.parse_args();cfg=load_config(a.config);verify(cfg)
     meta=verify_bundle(a.bundle)['metadata'];device=torch.device(a.device)
     if meta.get('cache_identity')!=digest(Path(cfg['cache'])/'READY.json') or meta.get('stage1_identity')!=stage1_identity(cfg):
@@ -22,7 +24,7 @@ def main():
         torch.bfloat16 if cfg['dtype']=='bf16' else torch.float32,cfg['attn_math'],
         time_sampler=cfg['time_sampler'],time_beta_alpha=cfg['time_beta_alpha'],time_beta_beta=cfg['time_beta_beta'],
         loss_objective=cfg['loss_objective'],joint_flow_weight=cfg['joint_flow_weight'],
-        text_loss=cfg.get('text_loss'))
+        text_loss=cfg.get('text_loss'),bbox=cfg.get('bbox'))
     load_bundle(model,Path(a.bundle))
     fx=Fixtures(cfg['cache'])
     tok=build_tokenizer_from_cfg(dict(type='PretrainedTokenizer',model_path=cfg['tokenizer']))
@@ -34,6 +36,12 @@ def main():
     apply_text_schedule(model,cfg.get('text_loss'),meta['preset'],meta['update'],meta['total_updates'])
     result=validate(Loss(model,True,metrics=True),fx.subset('validation'),fx,packed,cfg,
         model_cfg['vision_backbone']['vision_config']['image_size'],device,model.n_action_steps,1,0)
+    if a.bbox_generation_limit:
+        if cfg.get('bbox') is None or a.bbox_generation_limit < 0:
+            raise ValueError('bbox generation requires bbox config and positive limit')
+        from .bbox_evaluate import evaluate_grounding
+        result['bbox_generation'] = evaluate_grounding(model,prompts,fx,fx.subset('validation')[:a.bbox_generation_limit],
+            model_cfg['vision_backbone']['vision_config']['image_size'],device,a.bbox_max_new_tokens)
     print(json.dumps(dict(metrics=result,samples=len(fx.subset('validation')),split='validation',flow_seed=cfg['seed'])))
 
 if __name__=='__main__':main()

@@ -1,0 +1,14 @@
+{
+  "extends": "common.json",
+  "incoming": "D:/pi05_subtask/ours/dataset/dataset_goal_bbox_v1",
+  "cache": "cache/goal_bbox_v1",
+  "shared_stage1_root": "work_dirs/shared_goal_bbox_v1",
+  "max_prompt_length": 512,
+  "bbox": {
+    "contract": "fabric-goal-bbox-v1",
+    "weight": 5.0,
+    "type_weight": 1.0,
+    "coordinate_weight": 1.0,
+    "format_weight": 0.1
+  }
+}

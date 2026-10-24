@@ -25,6 +25,9 @@ def load_config(path):
 
 def resolve_config(result):
     result=copy.deepcopy(result)
+    if "bbox" in result:
+        from fluxvla.transforms.bbox_grounding import resolve_bbox
+        result["bbox"] = resolve_bbox(result["bbox"])
     if result.get('loss_objective', LOSS_OBJECTIVE) not in (LOSS_OBJECTIVE, 'gated-token-ce-v1'):
         raise ValueError('unsupported loss_objective')
     if result.get('loss_objective') == 'gated-token-ce-v1' and 'text_loss' not in result:
@@ -100,6 +103,8 @@ def stage1_identity(cfg):
 
 def validate_loss_contract(cfg, model_cfg, preset):
     """Reject silent objective changes while still allowing explicit legacy bundles."""
+    if model_cfg.get('bbox') != cfg.get('bbox'):
+        raise ValueError('bbox model/config mismatch')
     objective = cfg.get('loss_objective')
     mode = model_cfg.get('text_loss_mode', 'separate')
     if objective is None:
@@ -145,7 +150,11 @@ def validate_loss_contract(cfg, model_cfg, preset):
 
 def canonical_prompts(tokenizer,cfg):
     from fluxvla.transforms.subtask_fast_prompts import PrepareSubtaskFastPrompts
-    return PrepareSubtaskFastPrompts(tokenizer,state_dim=14,max_len=cfg['max_prompt_length'],
+    prompt_class = PrepareSubtaskFastPrompts
+    if cfg.get('bbox') is not None:
+        from fluxvla.transforms.subtask_bbox_prompts import PrepareSubtaskBboxPrompts
+        prompt_class = PrepareSubtaskBboxPrompts
+    return prompt_class(tokenizer,state_dim=14,max_len=cfg['max_prompt_length'],
         model_vocab_size=257152,low_level_action_tail='',low_level_eos=False,low_level_segmented=True,
         low_level_sees_task=False, all_causal=False, low_level_prompt_format='state_subtask',
         subtask_mask_spec=cfg.get('subtask_mask_spec'), subtask_templates=cfg.get('subtask_templates'))

@@ -1,0 +1,5 @@
+{
+  "extends": "bbox_common.json",
+  "training_method": "hybrid_insulated",
+  "output": "work_dirs/goal_bbox_v1_hybrid_insulated/seed-{seed}"
+}

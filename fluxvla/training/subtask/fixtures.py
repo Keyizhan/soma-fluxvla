@@ -97,15 +97,23 @@ class Fixtures:
 def prepare(fx, prompts, state_dim):
     from fluxvla.transforms.template_masks import TemplateMaskSpec
     if not prompts.subtask_mask_spec.records and not prompts.subtask_mask_spec.templates:
-        prompts.subtask_mask_spec = TemplateMaskSpec.fit([fx.texts(i)[1] for i in fx.subset('train')])
+        labels = [fx.texts(i)[1] for i in fx.subset('train')]
+        if hasattr(prompts, 'grounding_contract'):
+            from fluxvla.transforms.bbox_grounding import validate_goals
+            labels = [g['subtask'] for i in fx.subset('train') for g in validate_goals(fx.records[i]['grounding_json'])]
+        prompts.subtask_mask_spec = TemplateMaskSpec.fit(labels)
     packed = []
     for i in range(len(fx)):
         overall, subtask = fx.texts(i)
         states = np.asarray(fx.states[i], dtype=np.float64)[:state_dim]
+        extra = {}
+        if hasattr(prompts, 'grounding_contract'):
+            from fluxvla.transforms.bbox_grounding import validate_goals
+            extra['grounding'] = validate_goals(fx.records[i]['grounding_json'])
         packed.append(dict(
             high=prompts.high_level(overall, states, subtask,
-                                    fx.fast_ids[i] if len(fx.fast_ids[i]) else None),
-            low=prompts.low_level(subtask, states, overall),
+                                    fx.fast_ids[i] if len(fx.fast_ids[i]) else None, **extra),
+            low=prompts.low_level(subtask, states, overall, **extra),
             img_masks=torch.as_tensor(np.array(fx.img_masks[i], copy=True))))
     return packed
 
@@ -132,7 +140,7 @@ def collate(items, indices, fx, image_size, device, with_actions, n_action_steps
 
 def build_model(preset, smoke, device, pretrained=None, dtype=torch.float32,
                 attn_math='bf16', time_sampler='beta', time_beta_alpha=1.5, time_beta_beta=1.0,
-                loss_objective='unified-token-ce-v1', joint_flow_weight=1.0, text_loss=None):
+                loss_objective='unified-token-ce-v1', joint_flow_weight=1.0, text_loss=None, bbox=None):
     from fluxvla.training.presets.pi05_subtask_fast import PRESETS
     from .config import LOSS_OBJECTIVE
     if loss_objective not in (LOSS_OBJECTIVE, 'gated-token-ce-v1'):
@@ -150,6 +158,8 @@ def build_model(preset, smoke, device, pretrained=None, dtype=torch.float32,
     if text_loss is not None:
         from .text_loss import model_loss_settings
         cfg.update(model_loss_settings(text_loss, preset))
+    if bbox is not None:
+        cfg['bbox'] = bbox
     cfg['pretrained_name_or_path'] = None if smoke else pretrained
     cfg['attn_math'] = attn_math
     cfg.update(time_sampler=time_sampler, time_beta_alpha=time_beta_alpha, time_beta_beta=time_beta_beta)

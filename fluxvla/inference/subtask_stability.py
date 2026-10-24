@@ -23,11 +23,13 @@ class Decision:
 
 
 class SubtaskStability:
-    def __init__(self, confirmations: int = 1, reset_after_s: float = 5.0):
+    def __init__(self, confirmations: int = 1, reset_after_s: float = 5.0, key_fn=label_key, refresh_same=False):
         if isinstance(confirmations, bool) or not isinstance(confirmations, int) or confirmations < 1:
             raise ValueError("confirmations must be a positive integer")
         if not math.isfinite(reset_after_s) or reset_after_s <= 0:
             raise ValueError("reset_after_s must be finite and positive")
+        self.key_fn = key_fn
+        self.refresh_same = refresh_same
         self.confirmations = confirmations
         self.reset_after_s = reset_after_s
         self._state: Decision | None = None
@@ -35,7 +37,7 @@ class SubtaskStability:
     def propose(self, instruction: str, candidate: str, now: float,
                 *, fresh: bool = True) -> Decision:
         """Pure proposal: a failed action inference must not advance votes."""
-        if not math.isfinite(now) or not any(label_key(candidate)):
+        if not math.isfinite(now) or not any(self.key_fn(candidate)):
             raise ValueError("invalid observation time or empty subtask")
         old = self._state
         if old is None or old.instruction != instruction or not 0 <= now - old.observed_at < self.reset_after_s:
@@ -45,10 +47,10 @@ class SubtaskStability:
                             old.count, "reuse_no_vote", False)
         if self.confirmations == 1:
             return Decision(instruction, now, candidate, None, 0, "passthrough",
-                            label_key(candidate) != label_key(old.active))
-        if label_key(candidate) == label_key(old.active):
-            return Decision(instruction, now, old.active, None, 0, "same_task", False)
-        count = old.count + 1 if old.pending is not None and label_key(candidate) == label_key(old.pending) else 1
+                            self.key_fn(candidate) != self.key_fn(old.active))
+        if self.key_fn(candidate) == self.key_fn(old.active):
+            return Decision(instruction, now, candidate if self.refresh_same else old.active, None, 0, "same_task", False)
+        count = old.count + 1 if old.pending is not None and self.key_fn(candidate) == self.key_fn(old.pending) else 1
         if count >= self.confirmations:
             return Decision(instruction, now, candidate, None, 0, "confirmed", True)
         return Decision(instruction, now, old.active, candidate, count, "await_confirmation", False)

@@ -113,6 +113,8 @@ def bundle_assets(cfg, model_cfg, metadata):
         for key in ('loss_objective', 'joint_flow_weight'):
             if recorded.get(key) != cfg[key] or metadata.get(key, cfg[key]) != cfg[key]:
                 raise ValueError('checkpoint metadata loss objective differs from export configuration')
+        if recorded.get('bbox') != cfg.get('bbox'):
+            raise ValueError('checkpoint bbox differs from export configuration')
         if recorded.get('text_loss') != cfg.get('text_loss'):
             raise ValueError('checkpoint metadata text_loss differs from export configuration')
         if 'model_config' in metadata:
@@ -157,6 +159,10 @@ def bundle_assets(cfg, model_cfg, metadata):
         state_normalization='float64_quantiles_then_float32',
         cache_identity=metadata['cache_identity'], stage=metadata['stage'], update=metadata['update'],
         preset=metadata['preset'], smoke=metadata.get('smoke', False))
+    if cfg.get('bbox') is not None:
+        contract['bbox'] = cfg['bbox']
+        contract['prompt_transform'] = 'PrepareSubtaskBboxPrompts'
+        contract['task_prompt'] = 'observation + overall task -> grounded subtasks; observation + grounded subtasks -> actions'
     if paper:
         contract['prompt_contract'] = PROMPT_CONTRACT
     if loss_contract is not None:

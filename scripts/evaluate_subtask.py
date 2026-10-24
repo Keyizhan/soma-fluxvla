@@ -49,6 +49,9 @@ def evaluate(policy, arrays, records, output, *, seed=1702, limit=None):
                 key: images[i, c*3:(c+1)*3].transpose(1, 2, 0)
                 for c, key in enumerate(policy.camera_keys)}), noise=noise)
             predicted = subtask_for_action_prompt(result['subtask'])
+            if hasattr(policy.prompts, 'grounding_contract'):
+                from fluxvla.transforms.bbox_grounding import parse_grounded
+                predicted = ' || '.join(g['subtask'] for g in parse_grounded(result['subtask']))
             gt = subtask_for_action_prompt(r['subtask']) if r.get('subtask') else None
             if gt is not None:
                 labelled += 1
@@ -99,9 +102,10 @@ def main():
     p.add_argument('--limit', type=int)
     p.add_argument('--confirmations', type=int, default=1, help='1 measures raw predictions; 2 measures deployment filtering')
     p.add_argument('--allow-legacy-contract', action='store_true')
+    p.add_argument('--max-new-tokens',type=int,default=64)
     a = p.parse_args()
     policy = SubtaskPolicy.from_bundle(a.bundle, device=a.device,
-        config=InferenceConfig(subtask_switch_confirmations=a.confirmations),
+        config=InferenceConfig(subtask_switch_confirmations=a.confirmations,max_new_tokens=a.max_new_tokens),
         allow_legacy_contract=a.allow_legacy_contract)
     records = json.loads(Path(a.records).read_text())['records']
     with np.load(a.observations, allow_pickle=False) as arrays:

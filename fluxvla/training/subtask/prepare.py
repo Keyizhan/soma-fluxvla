@@ -51,6 +51,8 @@ def scan(cfg):
             state_key = choose(names, ['state', 'observation.state'])
             action_key = choose(names, ['actions', 'action'])
             required = [state_key, action_key, 'timestamp', 'subtask', 'subtask_valid', 'overall_task']
+            if cfg.get('bbox') is not None:
+                required += ['grounding_json', 'subtask_grounded', 'grounding_valid']
             table = pq.read_table(path, columns=required).to_pydict()
             state = np.asarray(table[state_key], dtype='float32')
             action = np.asarray(table[action_key], dtype='float32')
@@ -67,6 +69,16 @@ def scan(cfg):
             labels = table['subtask']
             if any(ok and (not isinstance(label,str) or not label.strip()) for label,ok in zip(labels,valid)):
                 raise ValueError(f'{path}: valid frames have missing subtask text')
+            if cfg.get('bbox') is not None:
+                from fluxvla.transforms.bbox_grounding import validate_goals, render_goals
+                for f, ok in enumerate(valid):
+                    if ok:
+                        if table['grounding_valid'][f] != 1:
+                            raise ValueError('bbox training requires complete grounding for valid frames')
+                        goals = validate_goals(table['grounding_json'][f])
+                        if (' || '.join(g['subtask'] for g in goals) != labels[f]
+                                or render_goals(goals) != table['subtask_grounded'][f]):
+                            raise ValueError('grounding source text mismatch')
             overall = table['overall_task']
             if any(not isinstance(t,str) or not t.strip() for t in overall) or len(set(overall)) != 1:
                 raise ValueError(f'{path}: require one nonempty overall_task')
@@ -92,6 +104,7 @@ def scan(cfg):
                     raise ValueError(f'unsupported camera {key}: {kind}')
             episodes.append(dict(root=str(root), episode=idx, path=str(path), state_key=state_key,
                 action_key=action_key, n=n, anchors=picked, trajectory_sha256=fingerprint,
+                bbox=cfg.get('bbox') is not None,
                 parquet_sha256=digest(path), sources=sources))
         if rows_total != int(info['total_frames']):
             raise ValueError(f'{root}: metadata frame count does not match actual frames')
@@ -112,7 +125,7 @@ def scan(cfg):
 
 
 def read_numeric(ep):
-    t = pq.read_table(ep['path'], columns=[ep['state_key'], ep['action_key'], 'timestamp', 'subtask', 'overall_task']).to_pydict()
+    t = pq.read_table(ep['path'], columns=[ep['state_key'], ep['action_key'], 'timestamp', 'subtask', 'overall_task'] + (['grounding_json'] if ep.get('bbox') else [])).to_pydict()
     return t, np.asarray(t[ep['state_key']], dtype='float32'), np.asarray(t[ep['action_key']], dtype='float32')
 
 
@@ -268,6 +281,8 @@ def prepare(cfg, code_root, processor=None):
             records.append(dict(sample_id=f'{len(records):08d}',source=ep['root'],episode=ep['episode'],frame=frame,
                 split=ep['split'],valid_length=length,timestamp=float(table['timestamp'][frame]),
                 overall_task=table['overall_task'][frame],subtask=table['subtask'][frame]))
+            if ep.get('bbox'):
+                records[-1]['grounding_json'] = table['grounding_json'][frame]
             offset += 1
         print(json.dumps(dict(episode=ep['episode'],source=ep['root'],cached=offset,total=n)),flush=True)
     if pool is not None:
@@ -322,6 +337,8 @@ def validate_cache_contract(ready):
 
 def validate_cache_config(ready,cfg):
     validate_cache_contract(ready)
+    if cfg.get('bbox') != ready['config'].get('bbox'):
+        raise ValueError('bbox cache/config mismatch; use a new cache')
     # Fixed episode manifests make this cache independent of the training seed.
     for key in ('version','prompt_contract','expected_episodes','validation_episodes','horizon','image_size','max_prompt_length','max_fast_tokens','camera_aliases','tokenizer','split_manifest'):
         if cfg[key]!=ready['config'][key]:
