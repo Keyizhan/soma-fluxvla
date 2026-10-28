@@ -32,7 +32,8 @@ pip install -e '.[cache,benchmark,test]'
 ## 目录
 
 ```text
-configs/pi05_piper.py           云端 shoes 运行参数的可移植版本
+configs/pi05_piper.py           云端 shoes 运行参数的可移植版本（无图像增广）
+configs/pi05_piper_aug.py       普通 PI0.5 在线图像增广配方；subtask 对照不用
 scripts/train.py                无 subtask 训练入口
 scripts/train.sh                torchrun 启动器
 scripts/build_video_cache.py    缓存构建
@@ -109,7 +110,12 @@ NPROC_PER_NODE=8 bash scripts/train.sh configs/pi05_piper.py work_dirs/pi05_pipe
 # 使用包含训练状态的 .pt 恢复，不能用仅权重的 .safetensors 替代。
 NPROC_PER_NODE=8 bash scripts/train.sh configs/pi05_piper.py work_dirs/pi05_piper \
   --resume-from work_dirs/pi05_piper/checkpoints/latest-checkpoint.pt
+
+# 普通 PI0.5 在线增广（不改发布数据和 224 缓存；不要用于 subtask 对照）。
+NPROC_PER_NODE=8 bash scripts/train.sh configs/pi05_piper_aug.py work_dirs/pi05_piper_aug
 ```
+
+`configs/pi05_piper.py` 仍是无增广基线。增广配方在 `ResizeImages` 之前对三路 uint8 图做 OpenVLA 语义的颜色扰动，没有空间裁剪，再走原来的 `[-1,1]` 归一化。训练和部署都用满幅画面，推理只需把原图缩到 224。每个 epoch 重新采样颜色；断点恢复不保证增广逐像素重放。
 
 启动器支持 `PYTHON`、`NNODES`、`NODE_RANK`、`MASTER_ADDR`、`MASTER_PORT`。
 使用 nohup/终端复用器可让训练独立于 SSH；启动器本身在前台运行，方便显示错误。
