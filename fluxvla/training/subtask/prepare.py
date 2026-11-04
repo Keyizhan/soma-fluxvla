@@ -110,8 +110,7 @@ def scan(cfg):
             raise ValueError(f'{root}: metadata frame count does not match actual frames')
     if len(episodes) != cfg['expected_episodes']:
         raise ValueError(f'waiting for complete data: expected {cfg["expected_episodes"]} episodes, found {len(episodes)}')
-    manifest=json.loads(Path(cfg['split_manifest']).read_text())
-    assignments={int(k):v for k,v in manifest['episodes'].items()}
+    assignments=read_split_assignments(cfg['split_manifest'])
     if set(assignments)!={ep['episode'] for ep in episodes}:
         raise ValueError('split manifest must cover every episode exactly once')
     groups={}
@@ -123,6 +122,22 @@ def scan(cfg):
         raise ValueError('duplicate trajectory crosses fixed episode splits')
     return episodes
 
+
+SOMA_TRAIN_SPLITS = {'train': 'train', 'val': 'validation', 'test': 'test'}
+
+
+def read_split_assignments(path):
+    """Episode -> split. Accepts the soma-train manifest (``soma.train.split_manifest.v1``,
+    lists ``train``/``val``/``test``) and the legacy ``{"episodes": {idx: split}}`` form."""
+    manifest=json.loads(Path(path).read_text())
+    if manifest.get('schema_version')=='soma.train.split_manifest.v1':
+        assignments={}
+        for key,split in SOMA_TRAIN_SPLITS.items():
+            for idx in manifest[key]:
+                if int(idx) in assignments:raise ValueError(f'episode {idx} in two splits')
+                assignments[int(idx)]=split
+        return assignments
+    return {int(k):v for k,v in manifest['episodes'].items()}
 
 def read_numeric(ep):
     t = pq.read_table(ep['path'], columns=[ep['state_key'], ep['action_key'], 'timestamp', 'subtask', 'overall_task'] + (['grounding_json'] if ep.get('bbox') else [])).to_pydict()

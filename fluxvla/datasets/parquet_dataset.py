@@ -43,7 +43,6 @@ class ParquetDataset(Dataset):
                  frame_sample_stride: int = 1,
                  episode_indices: Optional[List[int]] = None,
                  episode_frame_ranges: Optional[Dict[int, List[int]]] = None,
-                 train_episode_fraction: float = 1.0,
                  repeat_to_full_length: bool = False,
                  expose_index: bool = False,
                  expected_dataset_version: Optional[str] = None) -> None:
@@ -81,17 +80,14 @@ class ParquetDataset(Dataset):
                 temporal window:
                 ``(frame_window_size - 1) * frame_sample_stride`` rows.
             episode_indices (list[int], optional): Explicit immutable episode
-                membership. It is mutually exclusive with fractional splits.
+                membership, normally ``split_manifest.train`` from soma-train.
             episode_frame_ranges (dict[int, list[int]], optional): Optional
                 end-exclusive ``[start, end]`` frame-index range for each
                 selected episode. Intended for audited diagnostic subsets.
-            train_episode_fraction (float): Fraction of episodes to sample
-                from each data root, preserving original episode order.
-                Defaults to 1.0.
             repeat_to_full_length (bool): If True, repeat the selected
                 episode subset so `__len__` remains the full dataset length.
                 This keeps epoch length based on full statistics while
-                sampling only the selected train episode fraction.
+                sampling only the selected episodes.
             expose_index (bool): Whether to add the concatenated dataset index
                 to each raw sample before transforms. This is useful for
                 offline sample-weight transforms such as SARM RA-BC.
@@ -101,11 +97,6 @@ class ParquetDataset(Dataset):
                 existing local datasets remain usable.
         """
         super().__init__()
-        if not 0 < train_episode_fraction <= 1:
-            raise ValueError('train_episode_fraction must be in (0, 1].')
-        if episode_indices is not None and train_episode_fraction != 1.0:
-            raise ValueError('episode_indices and train_episode_fraction are '
-                             'mutually exclusive.')
         self.action_window_size = action_window_size
         if isinstance(data_root_path, str):
             data_root_path = [data_root_path]
@@ -169,7 +160,7 @@ class ParquetDataset(Dataset):
         self.dataset = hf_dataset
         self.full_length = len(self.dataset)
         self.sample_indices = self._build_sample_indices(
-            train_episode_fraction, episode_indices, episode_frame_ranges)
+            episode_indices, episode_frame_ranges)
         self.effective_length = (
             self.full_length
             if repeat_to_full_length else len(self.sample_indices))
@@ -238,12 +229,11 @@ class ParquetDataset(Dataset):
                 f'Please refresh the dataset with:\n\n{refresh_command}')
 
     def _build_sample_indices(
-            self, episode_fraction: float,
+            self,
             selected_episodes: Optional[List[int]] = None,
             episode_frame_ranges: Optional[Dict[int, List[int]]] = None
     ) -> np.ndarray:
-        if (selected_episodes is None and episode_frame_ranges is None
-                and episode_fraction == 1.0):
+        if selected_episodes is None and episode_frame_ranges is None:
             return np.arange(self.full_length, dtype=np.int64)
 
         ranges = {}
@@ -269,12 +259,10 @@ class ParquetDataset(Dataset):
             local_episode_indices = episode_indices[start:end]
             ordered_episodes = list(dict.fromkeys(local_episode_indices))
             available.update(ordered_episodes)
-            if requested is not None:
-                keep_episodes = requested
-            else:
-                keep_count = int(len(ordered_episodes) * episode_fraction)
-                keep_count = max(1, min(keep_count, len(ordered_episodes)))
-                keep_episodes = set(ordered_episodes[:keep_count])
+            # Splits come from soma-train's split_manifest (episode_indices);
+            # fractional sampling was removed (TODO D18).
+            keep_episodes = (requested if requested is not None
+                             else set(ordered_episodes))
             for offset, episode in enumerate(local_episode_indices):
                 if episode not in keep_episodes:
                     continue

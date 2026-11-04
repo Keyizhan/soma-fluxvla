@@ -1,6 +1,8 @@
 """Resolved configuration and strict controlled-comparison contracts."""
 import copy
 import json
+import os
+import re
 from pathlib import Path
 
 PROMPT_CONTRACT = 'pi05-subtask-paper-v1'
@@ -14,6 +16,23 @@ def merge(base, override):
         result[key]=merge(result[key],value) if isinstance(value,dict) and isinstance(result.get(key),dict) else copy.deepcopy(value)
     return result
 
+_ENV_VAR = re.compile(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+
+def expand_env(value):
+    """Expand ``${VAR}`` in config strings; an unset variable is an error, never a host default."""
+    if isinstance(value, dict):
+        return {k: expand_env(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [expand_env(v) for v in value]
+    if not isinstance(value, str):
+        return value
+    def sub(match):
+        name = match.group(1)
+        if not os.environ.get(name):
+            raise ValueError(f'environment variable {name} is not set (config value {value!r})')
+        return os.environ[name]
+    return _ENV_VAR.sub(sub, value)
+
 def _load_raw(path):
     path=Path(path)
     raw=json.loads(path.read_text())
@@ -21,7 +40,7 @@ def _load_raw(path):
     return merge(_load_raw(path.parent/parent),raw) if parent else raw
 
 def load_config(path):
-    return resolve_config(_load_raw(path))
+    return resolve_config(expand_env(_load_raw(path)))
 
 def resolve_config(result):
     result=copy.deepcopy(result)
