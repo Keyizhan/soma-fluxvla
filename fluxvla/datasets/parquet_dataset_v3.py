@@ -14,7 +14,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -128,7 +128,8 @@ class ParquetDatasetV3(ParquetDataset):
                  window_start_idx: int = 1,
                  frame_window_size: int = 1,
                  frame_sample_stride: int = 1,
-                 expose_index: bool = False) -> None:
+                 expose_index: bool = False,
+                 episode_indices: Optional[List[int]] = None) -> None:
         """Initialize a parquet dataset backed by LeRobot v3 metadata.
 
         Args:
@@ -151,6 +152,9 @@ class ParquetDatasetV3(ParquetDataset):
                 frames should span a longer temporal window.
             expose_index (bool): Whether to expose the concatenated row index
                 to transforms for offline sample weighting.
+            episode_indices (list[int], optional): Train only on these
+                episodes (soma-train ``split_manifest.train``). None keeps every
+                episode under ``data_root_path``.
         """
         Dataset.__init__(self)
         self.action_window_size = action_window_size
@@ -201,8 +205,10 @@ class ParquetDatasetV3(ParquetDataset):
         self.dataset_cumulative_sizes = np.cumsum([0] + dataset_sizes)
         self.dataset = concatenate_datasets(datasets)
         self.full_length = len(self.dataset)
-        self.sample_indices = np.arange(self.full_length, dtype=np.int64)
-        self.effective_length = self.full_length
+        self.sample_indices = (
+            np.arange(self.full_length, dtype=np.int64) if episode_indices is None
+            else self._build_sample_indices(episode_indices))
+        self.effective_length = len(self.sample_indices)
         self.transforms = list()
         self.action_key = action_key
         self.use_delta = use_delta
@@ -254,6 +260,7 @@ class ParquetDatasetV3(ParquetDataset):
             Dict: Sample dictionary containing task text, actions, masks,
             metadata, and transform outputs.
         """
+        index = self._resolve_index(index)
         data = self.dataset[index]
         dataset_idx = self._get_dataset_index(index)
         while True:
