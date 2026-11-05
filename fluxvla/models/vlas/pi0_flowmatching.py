@@ -677,6 +677,201 @@ class PI0FlowMatching(BaseVLA):
 
 
 
+    # --- inference (plan B): ported verbatim from upstream FluxVLA
+    # third_party/FluxVLA/fluxvla/models/vlas/pi0_flowmatching.py (predict_action,
+    # denoise_step and the RTC variants) so soma-fluxvla can sample actions for
+    # plain PI0.5 itself; scripts/check_predict_parity.py checks it against upstream.
+    def _predict_action_plain(self, x_t, denoise, bsize, dt, device):
+        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        while time >= -dt / 2:
+            t_batch = time.expand(bsize)
+            v_t = denoise(x_t, t_batch)
+            x_t += dt * v_t
+            time += dt
+        return x_t
+
+    def _predict_action_prefix_rtc(self, x_t, denoise, bsize, dt, device,
+                                   prev_actions, prefix_len):
+        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        prefix_mask = torch.zeros(
+            bsize, self.n_action_steps, dtype=torch.bool, device=device)
+        prefix_mask[:, :prefix_len] = True
+
+        while time >= -dt / 2:
+            t_batch = time.expand(bsize)
+            x_t[:, :prefix_len] = prev_actions[:, :prefix_len]
+            t_pos = t_batch.unsqueeze(1)
+            t_pos = t_pos.expand(-1, self.n_action_steps).clone()
+            t_pos[prefix_mask] = 0.0
+            v_t = denoise(x_t, t_pos)
+            x_t += dt * v_t
+            time += dt
+
+        x_t[:, :prefix_len] = prev_actions[:, :prefix_len]
+        return x_t
+
+    def _predict_action_guidance_rtc(self, x_t, denoise, bsize, dt, device,
+                                     prev_actions, prefix_len, rtc_config):
+        from fluxvla.engines.utils.rtc_guidance import (apply_rtc_guidance,
+                                                        compute_prefix_weights)
+
+        prefix_weights = compute_prefix_weights(
+            self.n_action_steps,
+            prefix_len,
+            rtc_config.get('decay_end', prefix_len * 2),
+            rtc_config.get('schedule', 'exp'),
+            device=device)
+        max_gw = rtc_config.get('max_guidance_weight', 5.0)
+        use_vjp = rtc_config.get('use_vjp', False)
+
+        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        while time >= -dt / 2:
+            t_batch = time.expand(bsize)
+            # PI0 uses opposite velocity sign.
+            # rtc_guidance expects: 0=noise, 1=clean.
+            v_fm = apply_rtc_guidance(
+                x_t,
+                lambda x: -denoise(x, t_batch),
+                prev_actions,
+                prefix_weights,
+                1.0 - time.item(),
+                max_gw,
+                use_vjp=use_vjp)
+            x_t += dt * (-v_fm)
+            time += dt
+        return x_t
+
+    def predict_action(self,
+                       images: List[torch.Tensor],
+                       lang_tokens: torch.Tensor,
+                       states: torch.Tensor,
+                       img_masks: Optional[torch.Tensor] = None,
+                       lang_masks: Optional[torch.Tensor] = None,
+                       past_key_values: Optional[Union[List[torch.FloatTensor],
+                                                       Cache]] = None,
+                       noise=None,
+                       prev_actions=None,
+                       prefix_len: int = 0,
+                       rtc_config: dict = None,
+                       *args,
+                       **kwargs):
+        device = states.device
+        bsize = states.shape[0]
+        if noise is None:
+            actions_shape = (bsize, self.n_action_steps, self.max_action_dim)
+            noise = self.sample_noise(actions_shape, device)
+
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+            images=images,
+            lang_tokens=lang_tokens,
+            img_masks=img_masks,
+            lang_masks=lang_masks)
+
+        prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks,
+                                                prefix_att_masks)
+        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+        # Compute image and language key value cache
+        prefix_att_2d_masks_4d = self._prepare_attention_masks_4d(
+            prefix_att_2d_masks)
+        inputs_embeds = [prefix_embs, None]
+        position_ids = prefix_position_ids
+        self.llm_backbone.config._attn_implementation = self.attention_implementation  # noqa: SLF001, E501
+        _, past_key_values = self.forward_model(
+            inputs_embeds=inputs_embeds,
+            attention_masks=prefix_att_2d_masks_4d,
+            position_ids=position_ids,
+            use_cache=True,
+            past_key_values=None)
+
+        dt = -1.0 / self.num_steps
+        dt = torch.tensor(dt, dtype=torch.float32, device=device)
+
+        if (prev_actions is not None and self.ori_action_dim is not None
+                and prev_actions.shape[-1] < self.max_action_dim):
+            pad_size = self.max_action_dim - prev_actions.shape[-1]
+            prev_actions = F.pad(prev_actions, (0, pad_size), value=0.0)
+
+        rtc_method = None
+        if prev_actions is not None and prefix_len > 0 and rtc_config:
+            rtc_method = rtc_config.get('method', 'prefix')
+
+        x_t = noise
+
+        def denoise(x, t):
+            return self.denoise_step(states, prefix_pad_masks, past_key_values,
+                                     x, t)
+
+        if rtc_method == 'prefix':
+            x_t = self._predict_action_prefix_rtc(
+                x_t=x_t,
+                denoise=denoise,
+                bsize=bsize,
+                dt=dt,
+                device=device,
+                prev_actions=prev_actions,
+                prefix_len=prefix_len)
+        elif rtc_method == 'guidance':
+            x_t = self._predict_action_guidance_rtc(
+                x_t=x_t,
+                denoise=denoise,
+                bsize=bsize,
+                dt=dt,
+                device=device,
+                prev_actions=prev_actions,
+                prefix_len=prefix_len,
+                rtc_config=rtc_config)
+        else:
+            x_t = self._predict_action_plain(
+                x_t=x_t, denoise=denoise, bsize=bsize, dt=dt, device=device)
+
+        return x_t
+
+    def denoise_step(
+        self,
+        states,
+        prefix_pad_masks,
+        past_key_values,
+        x_t,
+        timestep,
+    ):
+        """Apply one denoising step of the noise `x_t` at a given timestep."""
+        suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = (
+            self.embed_suffix(states, x_t, timestep))
+
+        suffix_len = suffix_pad_masks.shape[1]
+        batch_size = prefix_pad_masks.shape[0]
+        prefix_len = prefix_pad_masks.shape[1]
+        prefix_pad_2d_masks = prefix_pad_masks[:, None, :].expand(
+            batch_size, suffix_len, prefix_len)
+
+        suffix_att_2d_masks = make_att_2d_masks(suffix_pad_masks,
+                                                suffix_att_masks)
+
+        full_att_2d_masks = torch.cat(
+            [prefix_pad_2d_masks, suffix_att_2d_masks], dim=2)
+
+        # Prepare attention masks
+        full_att_2d_masks_4d = self._prepare_attention_masks_4d(
+            full_att_2d_masks)
+
+        self.llm_expert.config._attn_implementation = self.attention_implementation  # noqa: SLF001, E501
+
+        prefix_offsets = torch.sum(prefix_pad_masks, dim=-1)[:, None]
+        position_ids = prefix_offsets + torch.cumsum(
+            suffix_pad_masks, dim=1) - 1
+
+        suffix_out, _ = self.forward_model(
+            attention_masks=full_att_2d_masks_4d,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=[None, suffix_embs],
+            use_cache=False,
+            adarms_cond=[None, adarms_cond])
+        suffix_out = suffix_out[:, -self.n_action_steps:]
+        suffix_out = suffix_out.to(dtype=torch.float32)
+        v_t = self.action_out_proj(suffix_out)
+        return v_t
+
     def get_fsdp_wrapping_policy(self) -> Callable:
         """
         Returns the FSDP auto wrapping policy for the model.
