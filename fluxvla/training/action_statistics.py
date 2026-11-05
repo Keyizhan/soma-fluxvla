@@ -205,7 +205,7 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--episodes', help='end-exclusive START:END, e.g. 0:105')
     group.add_argument('--episodes-file', type=Path,
-                       help='JSON list of episodes, or a soma-train split_manifest.json (uses its train list)')
+                       help='JSON list of episodes, or a soma_train split_manifest.json (uses its train list)')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--horizon', type=int, default=50)
     parser.add_argument('--scratch', type=Path)

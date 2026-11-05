@@ -80,7 +80,7 @@ class ParquetDataset(Dataset):
                 temporal window:
                 ``(frame_window_size - 1) * frame_sample_stride`` rows.
             episode_indices (list[int], optional): Explicit immutable episode
-                membership, normally ``split_manifest.train`` from soma-train.
+                membership, normally ``split_manifest.train`` from soma_train.
             episode_frame_ranges (dict[int, list[int]], optional): Optional
                 end-exclusive ``[start, end]`` frame-index range for each
                 selected episode. Intended for audited diagnostic subsets.
@@ -259,7 +259,7 @@ class ParquetDataset(Dataset):
             local_episode_indices = episode_indices[start:end]
             ordered_episodes = list(dict.fromkeys(local_episode_indices))
             available.update(ordered_episodes)
-            # Splits come from soma-train's split_manifest (episode_indices);
+            # Splits come from soma_train's split_manifest (episode_indices);
             # fractional sampling was removed (TODO D18).
             keep_episodes = (requested if requested is not None
                              else set(ordered_episodes))

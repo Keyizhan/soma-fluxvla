@@ -88,7 +88,7 @@ def evaluate(policy, arrays, records, output, *, seed=1702, limit=None, split_ma
         within_gt_interval_comparisons=eligible,
         joint_rmse_rad=(joint_se/joint_n)**.5 if joint_n else None,
         gripper_mae_m=grip_ae/grip_n if grip_n else None,
-        # Shared metric (soma-train eval_report.v1): MSE in absolute joint space.
+        # Shared metric (soma_train eval_report.v1): MSE in absolute joint space.
         joint_mse_rad2=joint_se/joint_n if joint_n else None,
         gripper_mse_m2=float(dim_se[list(GRIPPERS)].sum()/dim_n[list(GRIPPERS)].sum()) if grip_n else None,
         per_dim_mse=[float(v) for v in dim_se/np.maximum(dim_n, 1)] if joint_n else None,
@@ -108,7 +108,7 @@ def evaluate(policy, arrays, records, output, *, seed=1702, limit=None, split_ma
 
 
 def eval_report(summary, split_manifest, *, release_id, split_name, episodes, horizon, steps):
-    """soma-train ``soma.train.eval_report.v1``: absolute-joint MSE plus subtask extras."""
+    """soma_train ``soma.train.eval_report.v1``: absolute-joint MSE plus subtask extras."""
     split = json.loads(Path(split_manifest).read_text())
     if split.get('schema_version') != 'soma.train.split_manifest.v1':
         raise ValueError('split manifest must be soma.train.split_manifest.v1')
@@ -141,7 +141,7 @@ def main():
     p.add_argument('--confirmations', type=int, default=1, help='1 measures raw predictions; 2 measures deployment filtering')
     p.add_argument('--allow-legacy-contract', action='store_true')
     p.add_argument('--max-new-tokens',type=int,default=64)
-    p.add_argument('--split-manifest', help='soma-train split_manifest.json; also writes eval_report.json')
+    p.add_argument('--split-manifest', help='soma_train split_manifest.json; also writes eval_report.json')
     p.add_argument('--split-name', default='val', choices=('val', 'test', 'train'))
     p.add_argument('--release-id')
     a = p.parse_args()

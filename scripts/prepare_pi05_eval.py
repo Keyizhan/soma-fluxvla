@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare plain PI0.5 offline-evaluation samples (soma-train TODO T4/T5, plan A).
+"""Prepare plain PI0.5 offline-evaluation samples (soma_train TODO T4/T5, plan A).
 
 Runs in the soma-fluxvla environment and reads episodes exactly the way training
 does (the run's ParquetDataset class, its action window and video decoding), but

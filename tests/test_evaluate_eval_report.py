@@ -1,4 +1,4 @@
-"""evaluate_subtask: absolute-joint MSE and the soma-train eval_report.v1 output (T4)."""
+"""evaluate_subtask: absolute-joint MSE and the soma_train eval_report.v1 output (T4)."""
 import json
 import runpy
 from pathlib import Path

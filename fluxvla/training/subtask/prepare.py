@@ -127,7 +127,7 @@ SOMA_TRAIN_SPLITS = {'train': 'train', 'val': 'validation', 'test': 'test'}
 
 
 def read_split_assignments(path):
-    """Episode -> split. Accepts the soma-train manifest (``soma.train.split_manifest.v1``,
+    """Episode -> split. Accepts the soma_train manifest (``soma.train.split_manifest.v1``,
     lists ``train``/``val``/``test``) and the legacy ``{"episodes": {idx: split}}`` form."""
     manifest=json.loads(Path(path).read_text())
     if manifest.get('schema_version')=='soma.train.split_manifest.v1':

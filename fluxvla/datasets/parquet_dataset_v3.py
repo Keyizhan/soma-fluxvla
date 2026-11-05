@@ -153,7 +153,7 @@ class ParquetDatasetV3(ParquetDataset):
             expose_index (bool): Whether to expose the concatenated row index
                 to transforms for offline sample weighting.
             episode_indices (list[int], optional): Train only on these
-                episodes (soma-train ``split_manifest.train``). None keeps every
+                episodes (soma_train ``split_manifest.train``). None keeps every
                 episode under ``data_root_path``.
         """
         Dataset.__init__(self)

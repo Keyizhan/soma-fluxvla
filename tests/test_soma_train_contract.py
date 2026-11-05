@@ -1,4 +1,4 @@
-"""soma-train interop: split manifest format (D18) and ${VAR} config paths (D19)."""
+"""soma_train interop: split manifest format (D18) and ${VAR} config paths (D19)."""
 import json
 
 import pytest
