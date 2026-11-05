@@ -1,18 +1,26 @@
 # Statistics are task data, not code (D19): this file is the table fitted on the
 # shoes train split. Point SOMA_PI05_STATS at another JSON to train another task,
 # and never inherit these numbers silently.
-import json as _json
-import os as _os
-from pathlib import Path as _Path
+# NOTE: mmengine parses this file lazily; `from x import y` becomes an object that
+# cannot be called, so the loader uses __import__ and builtins only.
+_os = __import__("os")
+_json = __import__("json")
+_inspect = __import__("inspect")
 
-_STATISTICS_FILE = _Path(__file__).with_name("pi05_piper_statistics.json")
+
+def _statistics_path():
+    # mmengine's lazy parser does not define __file__, and rejects `with`, so the
+    # preset's own location comes from the frame and the file is read manually.
+    here = _os.path.dirname(_os.path.abspath(_inspect.stack()[0].filename))
+    return _os.path.expanduser(
+        _os.environ.get("SOMA_PI05_STATS") or _os.path.join(here, "pi05_piper_statistics.json"))
 
 
 def _load_statistics():
-    path = _Path(_os.environ.get("SOMA_PI05_STATS") or _STATISTICS_FILE).expanduser()
-    if not path.is_file():
+    path = _statistics_path()
+    if not _os.path.isfile(path):
         raise FileNotFoundError(f"preset statistics not found: {path} (set SOMA_PI05_STATS)")
-    return _json.loads(path.read_text(encoding="utf-8"))
+    return _json.loads(open(path, encoding="utf-8").read())
 
 
 # Cloud shoes run: 5 epochs, global batch 64 on 8 GPUs, lr=1.6e-4.
